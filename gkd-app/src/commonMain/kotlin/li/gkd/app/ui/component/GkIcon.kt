@@ -35,6 +35,7 @@ import androidx.compose.material.icons.outlined.BrightnessAuto
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.Delete
@@ -240,6 +241,7 @@ object GkIcons {
     val Lock get() = Icons.Outlined.Lock
     val Title get() = Icons.Outlined.Title
     val TextFields get() = Icons.Outlined.TextFields
+    val Code get() = Icons.Outlined.Code
     val ArrowDownward get() = Icons.Outlined.ArrowDownward
     val ArrowUpward get() = Icons.Outlined.ArrowUpward
     val Check get() = Icons.Outlined.Check

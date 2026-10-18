@@ -1,6 +1,7 @@
 package li.gkd.app.ui.component
 
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.material3.ScaffoldDefaults
 import androidx.compose.runtime.Composable
@@ -14,6 +15,7 @@ val LocalEditorWindowInsets = staticCompositionLocalOf<WindowInsets?> { null }
 fun GkEditorLayout(
     title: @Composable () -> Unit, saveEnabled: Boolean,
     onClose: () -> Unit, onSave: () -> Unit,
+    menuActions: (@Composable RowScope.() -> Unit)? = null,
     content: @Composable (PaddingValues) -> Unit,
 ) {
     GkScaffold(
@@ -30,6 +32,7 @@ fun GkEditorLayout(
                     )
                 },
                 actions = {
+                    if (menuActions != null) menuActions()
                     GkIconButton(
                         GkIcons.Check, contentDescription = stringResource(Res.string.action_save),
                         enabled = saveEnabled, onClick = onSave

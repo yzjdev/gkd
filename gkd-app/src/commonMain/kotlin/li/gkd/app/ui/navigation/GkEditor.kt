@@ -32,6 +32,13 @@ fun GkEditor(
         }
     }
     GkBackHandler(onBack = requestClose)
-    GkEditorLayout(editor.titleContent, editor.saveEnabled, requestClose, save, content)
+    GkEditorLayout(
+        title = editor.titleContent,
+        saveEnabled = editor.saveEnabled,
+        onClose = requestClose,
+        onSave = save,
+        menuActions = editor.menuActions,
+        content = content,
+    )
     GkEditorDialogs(dialog, actions::dismissDialog, close)
 }

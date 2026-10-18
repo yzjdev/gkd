@@ -40,6 +40,27 @@ class UpsertRuleGroupViewModel(
         draft.value = value
     }
 
+    /** Visual draft of the blank page; null until the page is opened for the first time. */
+    val visualDraft: StateFlow<VisualRuleGroupDraft?>
+        field = MutableStateFlow<VisualRuleGroupDraft?>(null)
+
+    fun setVisualDraft(value: VisualRuleGroupDraft) {
+        beginEditing()
+        visualDraft.value = value
+    }
+
+    /** Starts visual editing from the group being edited, or from a blank draft when adding. */
+    fun startVisualDraft() {
+        if (visualDraft.value != null) return
+        beginEditing()
+        val group = uiState.value.value?.initialGroup
+        visualDraft.value = if (group != null) {
+            RuleVisualDraft.fromGroup(group)
+        } else {
+            VisualRuleGroupDraft()
+        }
+    }
+
     val groupKey get() = route.groupKey
     val appId get() = route.appId
 
@@ -76,8 +97,14 @@ class UpsertRuleGroupViewModel(
         }
         return UpsertRuleGroupUiState(
             initialGroup = initialGroup,
-            initialText = initialGroup?.cacheStr.orEmpty(),
+            initialText = initialGroup?.cacheStr ?: initialTemplate(),
         )
+    }
+
+    private fun initialTemplate(): String = when {
+        isAddAnyApp -> RuleTemplate.forNewApp()
+        appId != null -> RuleTemplate.forAppGroup()
+        else -> RuleTemplate.forGlobalGroup()
     }
 
     private fun beginEditing() {
@@ -94,8 +121,8 @@ class UpsertRuleGroupViewModel(
 
     suspend fun hasTextChanged(text: String): Boolean {
         val state = uiState.value.value ?: return false
-        if (!isEdit) return !text.isBlank()
         if (state.initialText == text) return false
+        if (!isEdit) return !text.isBlank()
         return withContext(Dispatchers.Default) {
             state.initialGroup?.cacheJsonObject != runCatching {
                 SubscriptionInputParser.parse(text, groupKey ?: 0).jsonObject

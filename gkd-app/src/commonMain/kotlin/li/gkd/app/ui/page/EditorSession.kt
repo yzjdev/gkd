@@ -1,5 +1,6 @@
 package li.gkd.app.ui.page
 
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 
@@ -10,5 +11,6 @@ data class EditorSession(
     val saveEnabled: Boolean = true,
     val onSave: suspend () -> Unit,
     val titleContent: @Composable () -> Unit = { Text(title) },
+    /** Extra top bar actions rendered before the save button. */
+    val menuActions: (@Composable RowScope.() -> Unit)? = null,
 )
-

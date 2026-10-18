@@ -28,6 +28,7 @@ import li.gkd.app.ui.subscription.ActionLogPage
 import li.gkd.app.ui.subscription.AppConfigPage
 import li.gkd.app.ui.subscription.CategoryEditorPage
 import li.gkd.app.ui.subscription.RuleExcludeEditorPage
+import li.gkd.app.ui.subscription.RuleHelpPage
 import li.gkd.app.ui.subscription.SubsAppGroupListPage
 import li.gkd.app.ui.subscription.SubsAppListPage
 import li.gkd.app.ui.subscription.SubsCategoryGroupPage
@@ -57,6 +58,7 @@ fun GkAppNavigation(
                 is SubsCategoryRoute -> SubsCategoryPage(route)
                 is SubsCategoryGroupRoute -> SubsCategoryGroupPage(route)
                 is RuleExcludeEditorRoute -> RuleExcludeEditorPage(host, route)
+                is RuleHelpRoute -> RuleHelpPage()
                 is AppConfigRoute -> AppConfigPage(route)
                 is ActionLogRoute -> ActionLogPage(route)
                 is UpsertRuleGroupRoute -> UpsertRuleGroupPage(host, route)

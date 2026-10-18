@@ -42,6 +42,7 @@ import li.gkd.app.ui.navigation.NotificationTextRoute
 import li.gkd.app.ui.navigation.QuickSettingsTilesRoute
 import li.gkd.app.ui.navigation.PrivilegeServiceRoute
 import li.gkd.app.ui.navigation.RuleExcludeEditorRoute
+import li.gkd.app.ui.navigation.RuleHelpRoute
 import li.gkd.app.ui.navigation.SnapshotPreviewRoute
 import li.gkd.app.ui.navigation.SnapshotSettingsRoute
 import li.gkd.app.ui.navigation.SubsAppGroupListRoute
@@ -260,6 +261,7 @@ private val desktopRoutes by lazy {
         "activity-log" to ActivityLogRoute,
         "event-log" to A11yEventLogRoute,
         "rule-editor" to UpsertRuleGroupRoute(SubscriptionIds.LOCAL),
+        "rule-help" to RuleHelpRoute,
         "category-editor" to CategoryEditorRoute(SubscriptionIds.LOCAL),
         "subs-global-groups" to SubsGlobalGroupListRoute(SubscriptionIds.LOCAL),
         "subs-apps" to SubsAppListRoute(SubscriptionIds.LOCAL),

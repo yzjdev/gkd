@@ -24,21 +24,16 @@ pnpm --dir gkd-selector build
 
 ## Release
 
-Publishing uses npm Trusted Publishing from `.github/workflows/publish-selector.yml`; no long-lived npm token is stored in GitHub. Configure the `@gkd-kit/selector` package on npm once with this GitHub trusted publisher:
-
-- Organization or user: `gkd-kit`
-- Repository: `gkd`
-- Workflow filename: `publish-selector.yml`
-- Allowed action: `npm publish`
-
-For each release, update `gkd-selector/package.json` to the intended stable version, commit and push it, then create a tag with the exact package name and version:
+Publishing is done locally; no CI workflow or long-lived token is involved. Log in to npm once, then for each release update `gkd-selector/package.json` to the intended stable version, commit it, and create a tag with the exact package name and version:
 
 ```shell
+pnpm login
 git tag -a '@gkd-kit/selector@0.6.0' -m '@gkd-kit/selector@0.6.0'
-git push origin '@gkd-kit/selector@0.6.0'
+node ./gkd-selector/scripts/validate-release-tag.ts '@gkd-kit/selector@0.6.0'
+pnpm -F @gkd-kit/selector publish
 ```
 
-The workflow accepts only numeric `x.y.z` versions and verifies that the tag equals `name@version` from `package.json`. Publishing runs the package `prepack` hook, so JVM and JS tests, the production build, TypeScript checking, and Node.js tests must all pass before npm receives the package.
+The version must be a numeric `x.y.z` and the tag must equal `name@version` from `package.json`; `validate-release-tag.ts` checks both and is optional. Publishing runs the package `prepack` hook, so JVM and JS tests, the production build, TypeScript checking, and Node.js tests must all pass before npm receives the package.
 
 ## Source maps
 

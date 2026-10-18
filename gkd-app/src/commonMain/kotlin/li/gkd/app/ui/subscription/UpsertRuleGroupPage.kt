@@ -17,7 +17,10 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -30,9 +33,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import li.gkd.app.resources.*
 import li.gkd.app.ui.MainViewModel
+import li.gkd.app.ui.component.GkIconButton
+import li.gkd.app.ui.component.GkIcons
 import li.gkd.app.ui.component.GkSubscriptionPageContent
 import li.gkd.app.ui.component.autoFocus
 import li.gkd.app.ui.navigation.GkEditor
+import li.gkd.app.ui.navigation.RuleHelpRoute
 import li.gkd.app.ui.navigation.UpsertRuleGroupRoute
 import li.gkd.app.ui.page.EditorSession
 import li.gkd.app.ui.platform.UiHost
@@ -54,23 +60,72 @@ fun UpsertRuleGroupPage(
         UpsertRuleGroupViewModel(route)
     }
     val draft by vm.draft.collectAsStateWithLifecycle()
+    val visualDraft by vm.visualDraft.collectAsStateWithLifecycle()
+    var blankPage by rememberSaveable { mutableStateOf(false) }
+    val visualTarget = when {
+        vm.isAddAnyApp -> VisualTarget.NewApp
+        vm.appId != null -> VisualTarget.AppGroup
+        else -> VisualTarget.GlobalGroup
+    }
     GkSubscriptionPageContent(vm.uiState, mainVm.navigator::pop) { data ->
         val text = draft ?: data.initialText
+        val visualText = visualDraft?.let { RuleVisualDraft.toJson5(it, visualTarget) }
+        val saveText = if (blankPage) visualText else text
         val inputInsets: Modifier = inputInsets()
 
         GkEditor(
             EditorSession(
                 title =
                     stringResource(if (vm.isEdit) Res.string.rule_edit else Res.string.rule_add),
-                hasChanges = { vm.hasTextChanged(text) },
-                saveEnabled = text.isNotBlank(),
-                onSave = { vm.saveRule(text) },
+                hasChanges = { saveText != null && vm.hasTextChanged(saveText) },
+                saveEnabled = !saveText.isNullOrBlank() &&
+                        (vm.isEdit || saveText != data.initialText),
+                onSave = { saveText?.let { vm.saveRule(it) } },
+                menuActions = {
+                    GkIconButton(
+                        // 图标表示点击后会切换到的编辑方式：代码 = JSON 文本，列表 = 可视化。
+                        imageVector = if (blankPage) GkIcons.Code else GkIcons.FormatListBulleted,
+                        contentDescription = stringResource(
+                            if (blankPage) Res.string.rule_editor_switch_to_input
+                            else Res.string.rule_editor_switch_to_blank,
+                        ),
+                        onClick = {
+                            host.hideIme()
+                            if (blankPage) {
+                                // 切回输入框时带上可视化生成的内容，便于继续微调。
+                                visualText?.let(vm::setDraft)
+                            } else {
+                                vm.startVisualDraft()
+                            }
+                            blankPage = !blankPage
+                        },
+                    )
+                    GkIconButton(
+                        imageVector = GkIcons.HelpOutline,
+                        contentDescription = stringResource(Res.string.rule_help),
+                        onClick = {
+                            host.hideIme()
+                            mainVm.navigator.navigate(RuleHelpRoute)
+                        },
+                    )
+                },
             ),
             onSaved = vm::onSaved,
             navigator = mainVm.navigator,
             hideIme = host::hideIme,
             actions = vm.editorActions,
         ) { paddingValues ->
+            if (blankPage) {
+                RuleVisualEditor(
+                    draft = visualDraft ?: VisualRuleGroupDraft(),
+                    target = visualTarget,
+                    onDraftChange = vm::setVisualDraft,
+                    modifier = Modifier.scaffoldPadding(paddingValues).fillMaxSize()
+                        .then(inputInsets),
+                    generated = visualText,
+                )
+                return@GkEditor
+            }
             val textColors =
                 TextFieldDefaults.colors(
                     focusedIndicatorColor = Color.Transparent,

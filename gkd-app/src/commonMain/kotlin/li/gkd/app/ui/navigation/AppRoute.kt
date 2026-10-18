@@ -120,6 +120,9 @@ data class RuleExcludeEditorRoute(
 }
 
 @Serializable
+data object RuleHelpRoute : AppRoute
+
+@Serializable
 data class SubsAppGroupListRoute(
     val subsItemId: Long,
     val appId: String,
