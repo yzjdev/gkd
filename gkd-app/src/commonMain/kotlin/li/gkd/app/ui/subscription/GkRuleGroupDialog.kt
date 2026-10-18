@@ -200,14 +200,13 @@ fun GkRuleGroupDialog(
                     },
                 )
             }
-            if (subs.isLocal) {
-                GkIconButton(
-                    imageVector = GkIcons.Edit,
-                    contentDescription = stringResource(Res.string.rule_edit),
-                    modifier = Modifier.size(48.dp),
-                    onClick = onClickEdit,
-                )
-            }
+            // 远程订阅的规则同样允许编辑，只有删除仍限本地订阅。
+            GkIconButton(
+                imageVector = GkIcons.Edit,
+                contentDescription = stringResource(Res.string.rule_edit),
+                modifier = Modifier.size(48.dp),
+                onClick = onClickEdit,
+            )
             Box {
                 GkIconButton(
                     imageVector = GkIcons.MoreVert, modifier = Modifier.size(48.dp),

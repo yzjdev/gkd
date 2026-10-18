@@ -17,6 +17,7 @@ data class ScaffoldExt(
         })
     },
     val floatingActionButton: @Composable () -> Unit = {},
+    val snackbarHost: @Composable () -> Unit = {},
     val content: @Composable (PaddingValues) -> Unit
 )
 

@@ -1,8 +1,8 @@
 package li.gkd.app.ui
 
+import li.gkd.app.ui.home.BottomNavItem
 import li.gkd.app.ui.navigation.AdvancedPageRoute
 import li.gkd.app.ui.navigation.GkdLink
-import li.gkd.app.ui.navigation.SnapshotPageRoute
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -13,7 +13,7 @@ class GkdLinkTest {
         assertEquals(GkdLink.Home(2), GkdLink.parse("gkd://page?tab=%32"))
         assertEquals(GkdLink.Home(null), GkdLink.parse("gkd://page?tab=invalid"))
         assertEquals(GkdLink.Page(AdvancedPageRoute), GkdLink.parse("gkd://page/1"))
-        assertEquals(GkdLink.Page(SnapshotPageRoute), GkdLink.parse("gkd://page/2"))
+        assertEquals(GkdLink.Home(BottomNavItem.Snapshot.key), GkdLink.parse("gkd://page/2"))
         assertEquals(GkdLink.parse("gkd://page/3"), GkdLink.parse("gkd://page/4"))
         assertEquals(GkdLink.WeChatScanner, GkdLink.parse("gkd://invoke/1"))
     }

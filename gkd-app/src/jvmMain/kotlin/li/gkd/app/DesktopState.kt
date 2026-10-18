@@ -42,7 +42,6 @@ import li.gkd.app.ui.navigation.NotificationTextRoute
 import li.gkd.app.ui.navigation.QuickSettingsTilesRoute
 import li.gkd.app.ui.navigation.PrivilegeServiceRoute
 import li.gkd.app.ui.navigation.RuleExcludeEditorRoute
-import li.gkd.app.ui.navigation.SnapshotPageRoute
 import li.gkd.app.ui.navigation.SnapshotPreviewRoute
 import li.gkd.app.ui.navigation.SnapshotSettingsRoute
 import li.gkd.app.ui.navigation.SubsAppGroupListRoute
@@ -236,6 +235,7 @@ class DesktopState(
                 BottomNavItem.Dashboard.key to "dashboard",
                 BottomNavItem.SubsManage.key to "subscriptions",
                 BottomNavItem.AppList.key to "apps",
+                BottomNavItem.Snapshot.key to "snapshots",
                 BottomNavItem.Settings.key to "settings",
             )
         }
@@ -273,7 +273,6 @@ private val desktopRoutes by lazy {
         "app-config" to AppConfigRoute("li.gkd"),
         "action-log" to ActionLogRoute(),
         "image-preview" to ImagePreviewRoute(),
-        "snapshots" to SnapshotPageRoute,
         "snapshot-preview" to SnapshotPreviewRoute(0, emptyList()),
         "web-view" to WebViewRoute(AppLinks.Home),
         "privilege-service" to PrivilegeServiceRoute,

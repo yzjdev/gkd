@@ -15,12 +15,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.unit.dp
 import androidx.core.animation.doOnEnd
@@ -41,7 +37,6 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.suspendCancellableCoroutine
 import li.gkd.app.a11y.topActivityFlow
 import li.gkd.app.app
 import li.gkd.app.permission.PermissionStates
@@ -59,7 +54,6 @@ import li.gkd.app.util.TimeUtils
 import li.gkd.app.util.ToastUtils
 import li.gkd.app.util.px
 import org.jetbrains.compose.resources.stringResource
-import kotlin.coroutines.resume
 import kotlin.math.abs
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -82,7 +76,6 @@ private class ShareContextLease(val context: ShareContext) : AutoCloseable {
 
 private class ShareContext {
     var count = 0
-    var overlayContentHidden by mutableStateOf(false)
     val scope = MainScope()
 
     init {
@@ -135,6 +128,19 @@ abstract class OverlayWindowService(
     @Composable
     abstract fun ComposeContent()
 
+    /** The window this service attaches to; null means the required host is unavailable. */
+    protected class OverlayWindowHost(
+        val windowManager: WindowManager,
+        val type: Int,
+    )
+
+    protected open fun resolveOverlayWindowHost(): OverlayWindowHost? =
+        OverlayWindowHost(app.windowManager, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY)
+
+    protected open fun onOverlayWindowHostUnavailable() {
+        stopSelf()
+    }
+
     @Composable
     fun ClosableTitle(
         title: String,
@@ -180,11 +186,7 @@ abstract class OverlayWindowService(
             setViewTreeLifecycleOwner(this@OverlayWindowService)
             setContent {
                 AppTheme(invertedTheme = true) {
-                    Box(
-                        modifier = Modifier.drawWithContent {
-                            if (!shareContext.overlayContentHidden) drawContent()
-                        },
-                    ) {
+                    Box {
                         ComposeContent()
                     }
                 }
@@ -192,38 +194,8 @@ abstract class OverlayWindowService(
         }
     }
 
-    protected val isOverlayContentHidden
-        get() = shareContext.overlayContentHidden
-
-    protected suspend fun <T> withAllOverlaysHidden(block: suspend () -> T): T {
-        shareContext.overlayContentHidden = true
-        return try {
-            awaitOverlayContentHidden()
-            block()
-        } finally {
-            shareContext.overlayContentHidden = false
-        }
-    }
-
-    private suspend fun awaitOverlayContentHidden() =
-        suspendCancellableCoroutine { continuation ->
-            val afterFrame = Runnable {
-                if (continuation.isActive) continuation.resume(Unit)
-            }
-            val onFrame = Runnable {
-                if (continuation.isActive) view.post(afterFrame)
-            }
-            continuation.invokeOnCancellation {
-                view.removeCallbacks(onFrame)
-                view.removeCallbacks(afterFrame)
-            }
-            view.postOnAnimation(onFrame)
-        }
-
     private val minMargin get() = 10.dp.px.toInt()
     private val defaultPosition get() = listOf(minMargin, BarUtils.getStatusHeight())
-
-    private lateinit var shareContext: ShareContext
 
     private val positionFlow by lazy {
         MutableStateFlow(
@@ -241,13 +213,21 @@ abstract class OverlayWindowService(
         useStopServiceReceiver()
         onCreated {
             val shareContextLease = acquireShareContext()
-            shareContext = shareContextLease.context
             onDestroyed { shareContextLease.close() }
             aliveSize++
             onDestroyed { ThreadUtils.runMainOrPost(1000) { aliveSize-- } }
             onDestroyed { savePosition() }
-            attachView()
-            onDestroyed { app.windowManager.removeView(view) }
+            val host = resolveOverlayWindowHost()
+            if (host == null) {
+                onOverlayWindowHostUnavailable()
+                return@onCreated
+            }
+            attachView(host)
+            onDestroyed {
+                OverlayWindowRegistry.unregister(view)
+                // 截图期间窗口可能已被摘除，移除失败是正常情况。
+                runCatching { host.windowManager.removeView(view) }
+            }
         }
     }
 
@@ -256,13 +236,14 @@ abstract class OverlayWindowService(
         SettingsRepository.updateOverlayPosition(positionKey, position.first(), position.last())
     }
 
-    private fun attachView() {
+    private fun attachView(host: OverlayWindowHost) {
         val marginX = minMargin
         val marginY = minMargin
+        val windowManager = host.windowManager
         val layoutParams = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            host.type,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                     WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
                     WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
@@ -299,7 +280,7 @@ abstract class OverlayWindowService(
                             val fraction = animator.animatedValue as Float
                             layoutParams.x = (startX + (x - startX) * fraction).toInt()
                             layoutParams.y = (startY + (y - startY) * fraction).toInt()
-                            app.windowManager.updateViewLayout(view, layoutParams)
+                            windowManager.updateViewLayout(view, layoutParams)
                         } else {
                             pause()
                         }
@@ -313,7 +294,10 @@ abstract class OverlayWindowService(
             }
         }
         lifecycleScope.launch {
-            view.viewTreeObserver.addOnGlobalLayoutListener { launch { resizeFlow.emit(Unit) } }
+            // A view-level listener survives the window being detached for a capture and re-attached.
+            view.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+                launch { resizeFlow.emit(Unit) }
+            }
             resizeFlow.debounce(100.milliseconds).collect { fixLimitXy() }
         }
         var downXy: Pair<Float, Float>? = null
@@ -358,7 +342,7 @@ abstract class OverlayWindowService(
                             screenHeight - view.height - marginY
                         )
                         positionFlow.value = listOf(layoutParams.x, layoutParams.y)
-                        app.windowManager.updateViewLayout(view, layoutParams)
+                        windowManager.updateViewLayout(view, layoutParams)
                         if (isDragging) {
                             longClickJob?.cancel()
                             longClickJob = null
@@ -390,7 +374,8 @@ abstract class OverlayWindowService(
                 else -> false
             }
         }
-        app.windowManager.addView(view, layoutParams)
+        windowManager.addView(view, layoutParams)
+        OverlayWindowRegistry.register(windowManager, view, layoutParams)
     }
 
 }

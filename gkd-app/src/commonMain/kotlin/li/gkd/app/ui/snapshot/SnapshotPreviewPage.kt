@@ -12,9 +12,11 @@ import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -35,11 +37,12 @@ import li.gkd.app.ui.component.GkRetainedSheet
 import li.gkd.app.ui.component.LocalEditorWindowInsets
 import li.gkd.app.ui.image.appImageLoader
 import li.gkd.app.ui.navigation.AppRoute
+import li.gkd.app.ui.navigation.HomeRoute
 import li.gkd.app.ui.navigation.ImagePreviewItem
 import li.gkd.app.ui.navigation.ImagePreviewRoute
-import li.gkd.app.ui.navigation.SnapshotPageRoute
 import li.gkd.app.ui.navigation.SnapshotPreviewRoute
 import li.gkd.app.ui.page.GkImagePreviewContent
+import li.gkd.app.ui.platform.GkBackHandler
 import li.gkd.app.ui.platform.GkSystemBars
 import li.gkd.app.ui.platform.UiHost
 import org.jetbrains.compose.resources.stringResource
@@ -58,10 +61,14 @@ fun SnapshotPreviewPage(
     val loadableState by vm.uiState.collectAsStateWithLifecycle()
     val state = loadableState.value
     val catalog by li.gkd.app.app.AppInfoRepository.state.collectAsStateWithLifecycle()
+    val nodeSnapshots by vm.nodeSnapshots.collectAsStateWithLifecycle()
     Box(modifier = Modifier.fillMaxSize()) {
         key(route) {
             val actionRequest by vm.actionRequest.collectAsStateWithLifecycle()
             var imageVersion by remember { mutableIntStateOf(0) }
+            var inspectingNodes by remember(route) { mutableStateOf(false) }
+            // 顶栏在查看模式下可以收起，所以退出查看还能用返回键。
+            GkBackHandler(inspectingNodes) { inspectingNodes = false }
             val snapshotsById = state?.associateBy { it.id }.orEmpty()
             val previewSnapshots = route.snapshotIds.mapNotNull(snapshotsById::get)
 
@@ -110,11 +117,34 @@ fun SnapshotPreviewPage(
                     actionContent = { _, index ->
                         val item = previewSnapshots.getOrNull(index)
                         if (item != null) {
+                            // 查看模式下顶栏已收起，退出交给返回键，这里只保留进入入口。
+                            GkIconButton(
+                                imageVector = GkIcons.CenterFocusWeak,
+                                contentDescription = stringResource(Res.string.snapshot_node_view_enter),
+                                colors = IconButtonDefaults.iconButtonColors(contentColor = Color.White),
+                                onClick = { inspectingNodes = true },
+                            )
                             GkIconButton(
                                 imageVector = GkIcons.MoreVert,
                                 contentDescription = stringResource(Res.string.more_label),
                                 colors = IconButtonDefaults.iconButtonColors(contentColor = Color.White),
                                 onClick = { vm.showActions(item.id) },
+                            )
+                        }
+                    },
+                    // 进入查看模式就收起顶栏，整块画面都能点到节点；退出靠返回键。
+                    hideBars = inspectingNodes,
+                    // The snapshot page draws its own zoom-free view so taps can resolve nodes.
+                    pageContent = { _, index, onToggleBars ->
+                        val item = previewSnapshots.getOrNull(index)
+                        if (item != null) {
+                            LaunchedEffect(item.id) { vm.ensureNodeSnapshot(item.id) }
+                            GkSnapshotNodeView(
+                                imageLoader = imageLoader,
+                                imagePath = item.image().path,
+                                snapshot = nodeSnapshots[item.id],
+                                inspecting = inspectingNodes,
+                                onToggleBars = onToggleBars,
                             )
                         }
                     },
@@ -157,7 +187,7 @@ fun SnapshotPreviewPage(
                         },
                         {
                             if (routeAfterDelete == null) {
-                                if (mainVm.navigator.topRoute == SnapshotPageRoute) mainVm.navigator.navigate(route)
+                                if (mainVm.navigator.topRoute == HomeRoute) mainVm.navigator.navigate(route)
                             } else if (mainVm.navigator.topRoute == routeAfterDelete) {
                                 replaceRoute(route)
                             }

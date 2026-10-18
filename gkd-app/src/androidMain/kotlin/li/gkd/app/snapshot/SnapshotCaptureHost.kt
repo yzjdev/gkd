@@ -29,6 +29,7 @@ import li.gkd.app.notif.NotificationCatalog
 import li.gkd.app.platform.PlatformResult
 import li.gkd.app.priv.privilegeContextFlow
 import li.gkd.app.resources.*
+import li.gkd.app.service.OverlayWindowRegistry
 import li.gkd.app.service.ScreenshotService
 import li.gkd.app.settings.SettingsRepository.settings
 import li.gkd.app.snapshot.platform.encodeSnapshotScreenshot
@@ -43,6 +44,9 @@ import li.gkd.app.util.px
 import org.jetbrains.compose.resources.getString
 import kotlin.math.min
 import kotlin.time.Duration.Companion.milliseconds
+
+/** 系统对连续截图的最小间隔，预热帧之后必须等过它才能再次截图。 */
+private const val CAPTURE_INTERVAL_MILLIS = 400L
 
 object SnapshotCaptureHost {
     val isCapturing: Boolean get() = SnapshotCaptureRepository.isCapturing
@@ -188,6 +192,25 @@ object SnapshotCaptureHost {
             }
         }
 
+    /**
+     * 丢弃一帧预热：截图管线(尤其 MediaProjection 的 acquireLatestImage)可能仍返回
+     * 悬浮窗隐藏之前就已缓冲的旧帧，先取一帧丢掉，正式截图才不会带残影。
+     * 系统对连续截图有最小间隔限制，预热之后必须等过该间隔，
+     * 否则正式截图会直接回调 ERROR_TAKE_SCREENSHOT_INTERVAL_TIME_SHORT。
+     */
+    private suspend fun discardStaleFrame() {
+        val stale = try {
+            A11yRuntime.screenshot()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            LogUtils.d("预热截图失败", e)
+            null
+        } ?: ScreenshotService.screenshot()
+        stale?.recycle()
+        delay(CAPTURE_INTERVAL_MILLIS.milliseconds)
+    }
+
     private suspend fun captureScreen(
         appId: String,
         automatorMode: AutomatorMode,
@@ -269,38 +292,42 @@ object SnapshotCaptureHost {
         val service = A11yRuntime.service
             ?: throw InspectionException(InspectionFailure.AccessibilityAuthorizationRequired)
         val settings = settings.value
-        val captured = SnapshotCaptureRepository.capture(settings.autoSaveSnapshotToDownloads) {
-            val rootNode = A11yRuntime.getRoot(service)
-                ?: throw InspectionException(InspectionFailure.SnapshotNodesUnavailable)
-            val appId = rootNode.packageName.toString()
-            val screenHeight = ScreenUtils.getHeight()
-            val screenWidth = ScreenUtils.getWidth()
-            val isLandscape = ScreenUtils.isLandscape()
-            coroutineScope {
-                val nodes = async(Dispatchers.IO) { captureNodeInfoList(rootNode) }
-                val activityId = async(Dispatchers.IO) { resolveActivityId(appId) }
-                val screenshot = async(Dispatchers.Default) {
-                    captureScreen(
-                        appId,
-                        service.mode,
-                        forcedCropStatusBar,
-                        settings.hideSnapshotStatusBar,
+        // 截图到保存完成全程隐藏悬浮窗，采集结束后才恢复显示。
+        val captured = OverlayWindowRegistry.withOverlaysHidden {
+            SnapshotCaptureRepository.capture(settings.autoSaveSnapshotToDownloads) {
+                val rootNode = A11yRuntime.getRoot(service)
+                    ?: throw InspectionException(InspectionFailure.SnapshotNodesUnavailable)
+                val appId = rootNode.packageName.toString()
+                val screenHeight = ScreenUtils.getHeight()
+                val screenWidth = ScreenUtils.getWidth()
+                val isLandscape = ScreenUtils.isLandscape()
+                coroutineScope {
+                    val nodes = async(Dispatchers.IO) { captureNodeInfoList(rootNode) }
+                    val activityId = async(Dispatchers.IO) { resolveActivityId(appId) }
+                    val screenshot = async(Dispatchers.Default) {
+                        discardStaleFrame()
+                        captureScreen(
+                            appId,
+                            service.mode,
+                            forcedCropStatusBar,
+                            settings.hideSnapshotStatusBar,
+                        )
+                    }
+                    val screen = screenshot.await()
+                    SnapshotCaptureInput(
+                        appId = appId,
+                        activityId = activityId.await(),
+                        screenHeight = screenHeight,
+                        screenWidth = screenWidth,
+                        isLandscape = isLandscape,
+                        nodes = nodes.await(),
+                        appInfo = AppInfoRepository.snapshot?.apps?.get(appId),
+                        gkdAppInfo = selfAppInfo,
+                        device = currentDeviceInfo(),
+                        screenshot = screen.bytes,
+                        screenshotStatus = screen.status,
                     )
                 }
-                val screen = screenshot.await()
-                SnapshotCaptureInput(
-                    appId = appId,
-                    activityId = activityId.await(),
-                    screenHeight = screenHeight,
-                    screenWidth = screenWidth,
-                    isLandscape = isLandscape,
-                    nodes = nodes.await(),
-                    appInfo = AppInfoRepository.snapshot?.apps?.get(appId),
-                    gkdAppInfo = selfAppInfo,
-                    device = currentDeviceInfo(),
-                    screenshot = screen.bytes,
-                    screenshotStatus = screen.status,
-                )
             }
         }
         val snapshot = captured.snapshot

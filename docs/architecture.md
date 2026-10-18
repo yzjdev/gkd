@@ -27,7 +27,7 @@
 
 Android/Desktop 采用单主界面设计，根 `MainViewModel` 由主界面的 ViewModelStore 持有，生命周期覆盖子页面。生产页面、私有 Composable 和子页面 ViewModel 通过 `MainViewModel.requireCurrent()` 访问已注册的根实例；根不持有子 ViewModel。页面 ViewModel 组织保存、确认和后续导航等事件流程，Compose 负责展示和 IME、焦点等界面操作。
 
-`GkAppNavigation` 是双端生产路由注册，`GkNavigation` 管理导航条目、框架保存状态及 ViewModel 生命周期。每次入栈由 `AppNavEntry` 区分，即使路由相同也不共享条目状态。HomeRoute 的 HomeViewModel 管理四标签状态与业务，子路由持有各自需要的 ViewModel；纯展示和组件瞬时状态不单独创建 ViewModel。
+`GkAppNavigation` 是双端生产路由注册，`GkNavigation` 管理导航条目、框架保存状态及 ViewModel 生命周期。每次入栈由 `AppNavEntry` 区分，即使路由相同也不共享条目状态。HomeRoute 的 HomeViewModel 管理五标签状态与业务，子路由持有各自需要的 ViewModel；纯展示和组件瞬时状态不单独创建 ViewModel。
 
 仓库只读 Flow 在消费处收集；ViewModel 管理业务查询聚合、Paging、加载/失败及保存冲突基准。数据库查询首发前使用 `Loadable.Loading`，已加载空结果使用 `Ready(emptyList())`。搜索/筛选、编辑草稿及基准等自定义页面状态由所属 ViewModel 的 `MutableStateFlow` 持有，页面通过只读 `StateFlow` 和明确事件方法使用，不依赖自定义 Saver 恢复。状态随所属导航条目清理，StateFlow 本身不承担落盘或进程重启恢复。
 

@@ -9,7 +9,10 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import li.gkd.app.model.ComplexSnapshot
 import li.gkd.app.platform.PlatformResult
 import li.gkd.app.resources.*
 import li.gkd.app.snapshot.SnapshotStore
@@ -44,6 +47,30 @@ class SnapshotViewModel : BaseViewModel() {
     val selection = MultiSelectionState<Long>()
 
     val uiState = Db.snapshotDao.query().stateLoadable()
+
+    /** Snapshots whose node tree is loaded for bound drawing; entries appear on demand. */
+    val nodeSnapshots: StateFlow<Map<Long, ComplexSnapshot>>
+        field = MutableStateFlow(emptyMap())
+
+    private val nodeLoadJobs = mutableMapOf<Long, Job>()
+
+    /** Only the visible preview page needs bounds, so node trees load per snapshot. */
+    fun ensureNodeSnapshot(snapshotId: Long) {
+        if (nodeSnapshots.value.containsKey(snapshotId)) return
+        if (nodeLoadJobs[snapshotId] != null) return
+        nodeLoadJobs[snapshotId] = scope.launch {
+            try {
+                val snapshot = SnapshotStore.getSnapshot(snapshotId)
+                nodeSnapshots.update { it + (snapshotId to snapshot) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                LogUtils.d("Cannot read snapshot $snapshotId", e)
+            } finally {
+                nodeLoadJobs.remove(snapshotId)
+            }
+        }
+    }
 
     val shareProgress: StateFlow<SnapshotShareProgress?>
         field = MutableStateFlow(null)

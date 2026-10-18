@@ -98,6 +98,12 @@ object SnapshotStore {
         minSnapshot
     }
 
+    /** Full snapshot including nodes; only readers that draw node bounds need this. */
+    suspend fun getSnapshot(id: Long): ComplexSnapshot = withContext(Dispatchers.IO) {
+        val text = fileLayout.committed(id).snapshotFile.readText()
+        withContext(Dispatchers.Default) { json.decodeFromString<ComplexSnapshot>(text) }
+    }
+
     suspend fun delete(snapshot: Snapshot) {
         mutationMutex.withLock {
             currentCoroutineContext().ensureActive()

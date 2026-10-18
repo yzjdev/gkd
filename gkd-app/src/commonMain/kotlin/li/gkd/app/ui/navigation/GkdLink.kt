@@ -1,5 +1,6 @@
 package li.gkd.app.ui.navigation
 
+import li.gkd.app.ui.home.BottomNavItem
 import java.net.URI
 import java.net.URLDecoder
 
@@ -20,7 +21,8 @@ sealed interface GkdLink {
                             ?.let { URLDecoder.decode(it, "UTF-8").toIntOrNull() })
 
                     "/1" -> Page(AdvancedPageRoute)
-                    "/2" -> Page(SnapshotPageRoute)
+                    // 快照页已并入主界面标签，旧链接继续指向该标签。
+                    "/2" -> Home(BottomNavItem.Snapshot.key)
                     "/3", "/4" -> Page(PrivilegeServiceRoute)
                     else -> null
                 }

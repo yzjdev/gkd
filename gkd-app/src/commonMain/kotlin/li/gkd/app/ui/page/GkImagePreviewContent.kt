@@ -101,9 +101,18 @@ fun GkImagePreviewContent(
     pagerState: PagerState? = null,
     titleContent: (@Composable (Int) -> Unit)? = null,
     actionContent: @Composable RowScope.(String?, Int) -> Unit = { _, _ -> },
+    // Replaces the built-in zoomable image for hosts that draw their own page content.
+    pageContent: (@Composable (uri: String, index: Int, onToggleBars: () -> Unit) -> Unit)? = null,
+    // Asks the bars to collapse once, e.g. when the host needs the whole page area.
+    hideBars: Boolean = false,
 ) {
     val context = LocalPlatformContext.current
     var showBars by remember { mutableStateOf(true) }
+    val toggleBars = { showBars = !showBars }
+    // 复用点击时的同一套隐藏逻辑：进入时收起顶栏与分页，退出时恢复显示。
+    LaunchedEffect(hideBars) {
+        showBars = !hideBars
+    }
 
     val previewItems = route.items
     val previewUris = remember(previewItems) { previewItems.map { it.uri } }
@@ -143,12 +152,16 @@ fun GkImagePreviewContent(
         when {
             singleItem != null -> {
                 key(singleItem.uri, imageVersion) {
-                    UriImage(
-                        imageLoader = imageLoader,
-                        uri = singleItem.uri,
-                        version = imageVersion,
-                        onToggleBars = { showBars = !showBars },
-                    )
+                    if (pageContent != null) {
+                        pageContent(singleItem.uri, 0, toggleBars)
+                    } else {
+                        UriImage(
+                            imageLoader = imageLoader,
+                            uri = singleItem.uri,
+                            version = imageVersion,
+                            onToggleBars = toggleBars,
+                        )
+                    }
                 }
             }
 
@@ -158,12 +171,16 @@ fun GkImagePreviewContent(
                     state = activePagerState,
                     pageContent = { index ->
                         key(previewItems[index].uri, imageVersion) {
-                            UriImage(
-                                imageLoader = imageLoader,
-                                uri = previewItems[index].uri,
-                                version = imageVersion,
-                                onToggleBars = { showBars = !showBars },
-                            )
+                            if (pageContent != null) {
+                                pageContent(previewItems[index].uri, index, toggleBars)
+                            } else {
+                                UriImage(
+                                    imageLoader = imageLoader,
+                                    uri = previewItems[index].uri,
+                                    version = imageVersion,
+                                    onToggleBars = toggleBars,
+                                )
+                            }
                         }
                     }
                 )

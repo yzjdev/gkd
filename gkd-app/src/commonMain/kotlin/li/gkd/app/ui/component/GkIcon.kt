@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.AddPhotoAlternate
 import androidx.compose.material.icons.outlined.ArrowDownward
+import androidx.compose.material.icons.outlined.ArrowUpward
 import androidx.compose.material.icons.outlined.AutoMode
 import androidx.compose.material.icons.outlined.BrightnessAuto
 import androidx.compose.material.icons.outlined.CalendarMonth
@@ -49,6 +50,7 @@ import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.RemoveCircleOutline
 import androidx.compose.material.icons.outlined.RocketLaunch
 import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.TextFields
 import androidx.compose.material.icons.outlined.Title
@@ -202,6 +204,7 @@ object GkIcons {
     val Share get() = Icons.Default.Share
     val Delete get() = Icons.Outlined.Delete
     val Close get() = Icons.Default.Close
+    val Search get() = Icons.Outlined.Search
     val OpenInNew get() = Icons.AutoMirrored.Outlined.OpenInNew
     val Settings get() = Icons.Outlined.Settings
     val Home get() = Icons.Outlined.Home
@@ -238,5 +241,6 @@ object GkIcons {
     val Title get() = Icons.Outlined.Title
     val TextFields get() = Icons.Outlined.TextFields
     val ArrowDownward get() = Icons.Outlined.ArrowDownward
+    val ArrowUpward get() = Icons.Outlined.ArrowUpward
     val Check get() = Icons.Outlined.Check
 }

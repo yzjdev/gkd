@@ -1,5 +1,6 @@
 package li.gkd.app.service
 
+import android.view.WindowManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
@@ -10,24 +11,37 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import li.gkd.app.notif.NotificationCatalog
-import li.gkd.app.permission.PermissionStates
 import li.gkd.app.resources.*
 import li.gkd.app.snapshot.SnapshotCaptureHost
 import li.gkd.app.ui.component.GkIcon
 import li.gkd.app.ui.component.GkIcons
 import li.gkd.app.ui.share.launchUi
 import li.gkd.app.util.IntentUtils
+import li.gkd.app.util.ToastUtils
 
 class ButtonService : OverlayWindowService(
     positionKey = "button"
 ) {
+    // The snapshot button lives in the accessibility overlay, so it needs no draw-over-apps grant.
+    override fun resolveOverlayWindowHost(): OverlayWindowService.OverlayWindowHost? {
+        val service = A11yService.instance ?: return null
+        return OverlayWindowService.OverlayWindowHost(
+            service.wm,
+            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+        )
+    }
+
+    override fun onOverlayWindowHostUnavailable() {
+        // start() 已在无障碍未连接时提示原因，这里只收尾。
+        stopSelf()
+    }
+
     override fun onClickView() {
-        if (isOverlayContentHidden) return
         lifecycleScope.launchUi {
-            withAllOverlaysHidden {
-                SnapshotCaptureHost.capture()
-            }
+            SnapshotCaptureHost.capture()
         }
     }
 
@@ -53,6 +67,11 @@ class ButtonService : OverlayWindowService(
         )
         onCreated {
             NotificationCatalog.button().startForeground()
+            // The overlay belongs to the accessibility window; it cannot outlive that connection.
+            lifecycleScope.launch {
+                A11yService.isRunning.first { !it }
+                stopSelf()
+            }
         }
     }
 
@@ -61,7 +80,11 @@ class ButtonService : OverlayWindowService(
             field = MutableStateFlow(false)
 
         fun start() {
-            if (!PermissionStates.drawOverlays.checkOrToast()) return
+            // 无障碍类型悬浮窗由无障碍服务提供窗口令牌，未连接时无法显示。
+            if (A11yService.instance == null) {
+                ToastUtils.show(Res.string.service_not_connected.getSync())
+                return
+            }
             IntentUtils.startForegroundService(ButtonService::class)
         }
 

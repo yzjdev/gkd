@@ -41,12 +41,12 @@ import li.gkd.app.ui.component.GkSizedIconButton
 import li.gkd.app.ui.component.GkTextSwitch
 import li.gkd.app.ui.component.GkTopAppBar
 import li.gkd.app.ui.component.autoFocus
+import li.gkd.app.ui.home.BottomNavItem
 import li.gkd.app.ui.navigation.A11yEventLogRoute
 import li.gkd.app.ui.navigation.ActivityLogRoute
 import li.gkd.app.ui.navigation.CrashReportRoute
 import li.gkd.app.ui.navigation.ExternalCallsRoute
 import li.gkd.app.ui.navigation.QuickSettingsTilesRoute
-import li.gkd.app.ui.navigation.SnapshotPageRoute
 import li.gkd.app.ui.navigation.SnapshotSettingsRoute
 import li.gkd.app.ui.platform.UiHost
 import li.gkd.app.ui.style.TABULAR_NUMBERS_FONT_FEATURE
@@ -180,7 +180,10 @@ fun AdvancedPage(
             AdvancedSectionTitle(stringResource(Res.string.advanced_snapshot_capture))
             GkSettingItem(
                 title = stringResource(Res.string.snapshot_records),
-                onClick = { mainVm.navigator.navigate(SnapshotPageRoute) },
+                onClick = {
+                    mainVm.homeNavigation.selectTab(BottomNavItem.Snapshot)
+                    mainVm.navigator.popToHome()
+                },
             )
             GkTextSwitch(
                 title = stringResource(Res.string.snapshot_button_label),

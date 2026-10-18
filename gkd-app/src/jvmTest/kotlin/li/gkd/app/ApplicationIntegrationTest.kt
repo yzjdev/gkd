@@ -45,9 +45,9 @@ import li.gkd.app.ui.home.HomeState
 import li.gkd.app.ui.home.HomeViewModel
 import li.gkd.app.ui.navigation.AboutRoute
 import li.gkd.app.ui.navigation.ActionLogRoute
+import li.gkd.app.ui.navigation.ActivityLogRoute
 import li.gkd.app.ui.navigation.AppConfigRoute
 import li.gkd.app.ui.navigation.HomeRoute
-import li.gkd.app.ui.navigation.SnapshotPageRoute
 import li.gkd.app.ui.subscription.AppConfigViewModel
 import li.gkd.app.ui.subscription.ActionLogViewModel
 import li.gkd.app.ui.update.UpdateStatus
@@ -403,8 +403,8 @@ class ApplicationIntegrationTest {
                 val retrieved = androidx.lifecycle.ViewModelProvider.create(state)[MainViewModel::class]
                 kotlin.test.assertSame(vm, retrieved)
                 vm.navigator.navigate(AboutRoute)
-                vm.navigator.navigate(SnapshotPageRoute, replaced = true)
-                assertEquals(listOf(HomeRoute, SnapshotPageRoute), vm.navigator.backStack.map { it.route })
+                vm.navigator.navigate(ActivityLogRoute, replaced = true)
+                assertEquals(listOf(HomeRoute, ActivityLogRoute), vm.navigator.backStack.map { it.route })
                 vm.navigator.pop()
                 assertEquals(HomeRoute, vm.navigator.topRoute)
                 val previousHome = HomeState()

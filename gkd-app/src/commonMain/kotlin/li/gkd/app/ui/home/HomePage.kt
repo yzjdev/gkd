@@ -5,6 +5,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.lifecycle.viewmodel.compose.viewModel
 import li.gkd.app.ui.MainViewModel
 import li.gkd.app.ui.platform.UiHost
+import li.gkd.app.ui.snapshot.snapshotPage
 
 @Composable
 fun HomePage(host: UiHost) {
@@ -18,6 +19,7 @@ fun HomePage(host: UiHost) {
         when (tab) {
             BottomNavItem.Dashboard -> dashboardPage(host, vm)
             BottomNavItem.AppList -> appListPage(host, vm)
+            BottomNavItem.Snapshot -> snapshotPage(host, vm)
             BottomNavItem.SubsManage -> subsManagePage(vm)
             BottomNavItem.Settings -> settingsPage(host, vm)
         }

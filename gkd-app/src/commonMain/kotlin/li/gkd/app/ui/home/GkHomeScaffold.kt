@@ -22,6 +22,7 @@ fun GkHomeScaffold(
     GkScaffold(
         modifier = page.modifier, topBar = page.topBar,
         floatingActionButton = page.floatingActionButton,
+        snackbarHost = page.snackbarHost,
         bottomBar = {
             NavigationBar(
                 windowInsets = LocalHomeNavigationInsets.current

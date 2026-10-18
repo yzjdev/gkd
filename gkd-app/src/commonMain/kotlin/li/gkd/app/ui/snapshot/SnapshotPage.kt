@@ -26,6 +26,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Text
@@ -90,9 +91,14 @@ import li.gkd.app.ui.component.GkMultiSelectionActions
 import li.gkd.app.ui.component.GkMultiSelectionTopAppBar
 import li.gkd.app.ui.component.GkPageBottomSpace
 import li.gkd.app.ui.component.GkRetainedSheet
-import li.gkd.app.ui.component.GkScaffold
+import li.gkd.app.ui.home.BottomNavItem
+import li.gkd.app.ui.home.HomeViewModel
+import li.gkd.app.ui.home.ResetPageScrollOnRequest
+import li.gkd.app.ui.home.ScaffoldExt
 import li.gkd.app.ui.image.appImageLoader
 import li.gkd.app.ui.navigation.SnapshotPreviewRoute
+import li.gkd.app.ui.settings.setSnapshotButtonEnabled
+import li.gkd.app.ui.settings.snapshotButtonRunning
 import li.gkd.app.snapshot.SnapshotDisplayMode
 import li.gkd.app.model.findOption
 import li.gkd.app.ui.platform.GkBackHandler
@@ -107,9 +113,10 @@ import org.jetbrains.compose.resources.getString
 import org.jetbrains.compose.resources.stringResource
 
 @Composable
-fun SnapshotPage(
+fun snapshotPage(
     host: UiHost,
-) {
+    homeVm: HomeViewModel,
+): ScaffoldExt {
     val mainVm = MainViewModel.requireCurrent()
     val imageLoader = appImageLoader()
     fun uploadSnapshots(snapshots: List<Snapshot>, onFinished: () -> Unit) =
@@ -228,8 +235,14 @@ fun SnapshotPage(
         if (loadableState is Loadable.Ready) selectionState.retain(allIds)
     }
     GkBackHandler(selectionSnapshot.active) { selectionState.clear() }
+    ResetPageScrollOnRequest(homeVm.homeState, BottomNavItem.Snapshot) {
+        scrollBehavior.state.heightOffset = 0f
+        scrollBehavior.state.contentOffset = 0f
+        gridState.scrollToItem(0)
+    }
 
-    GkScaffold(
+    val page = ScaffoldExt(
+        navItem = BottomNavItem.Snapshot,
         modifier = Modifier.gkTopAppBarScroll(scrollBehavior),
         snackbarHost = {
             shareProgress?.let {
@@ -241,10 +254,9 @@ fun SnapshotPage(
                 selectedMode = selectionSnapshot.active,
                 selectedCount = selectedIds.size,
                 onExitSelection = selectionState::clear,
-                onNavigateBack = mainVm.navigator::pop,
                 onTitleClick = resetScroll,
                 scrollBehavior = scrollBehavior,
-                title = { Text(stringResource(Res.string.snapshot_records)) },
+                title = { Text(BottomNavItem.Snapshot.label) },
                 actions = { selectedMode ->
                     if (selectedMode) {
                         GkMultiSelectionActions(
@@ -374,6 +386,21 @@ fun SnapshotPage(
                             )
                         }
                     } else {
+                        val buttonRunning: Boolean = snapshotButtonRunning()
+                        val buttonStateLabel = stringResource(
+                            if (buttonRunning) Res.string.snapshot_button_enabled
+                            else Res.string.snapshot_button_label
+                        )
+                        GkIconButton(
+                            imageVector = GkIcons.CenterFocusWeak,
+                            modifier = Modifier.semantics { stateDescription = buttonStateLabel },
+                            contentDescription = stringResource(Res.string.snapshot_button_label),
+                            colors = IconButtonDefaults.iconButtonColors(
+                                contentColor = if (buttonRunning) MaterialTheme.colorScheme.primary
+                                else LocalContentColor.current,
+                            ),
+                            onClick = { host.setSnapshotButtonEnabled(!buttonRunning) },
+                        )
                         val displayModeLabel = stringResource(displayMode.labelResource)
                         val nextMode = SnapshotDisplayMode.entries.findOption(
                             SnapshotDisplayMode.switch(settings.snapshotDisplayMode)
@@ -502,6 +529,7 @@ fun SnapshotPage(
             onDelete = { actions.delete(snapshot) },
         )
     }
+    return page
 }
 
 @Composable

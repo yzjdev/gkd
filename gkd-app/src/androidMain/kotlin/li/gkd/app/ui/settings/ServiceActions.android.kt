@@ -18,7 +18,6 @@ actual fun UiHost.setSnapshotButtonEnabled(enabled: Boolean) {
         if (!enabled || mainVm.androidState.permissionRequests.ensurePermissions(
                 PermissionStates.foregroundServiceSpecialUse,
                 PermissionStates.notification,
-                PermissionStates.drawOverlays,
             )
         ) {
             ServiceController.setSnapshotButtonEnabled(enabled)

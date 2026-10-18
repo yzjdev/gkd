@@ -97,9 +97,6 @@ data object QuickSettingsTilesRoute : AppRoute
 data object WorkModeRoute : AppRoute
 
 @Serializable
-data object SnapshotPageRoute : AppRoute
-
-@Serializable
 data class SnapshotPreviewRoute(
     val snapshotId: Long,
     val snapshotIds: List<Long>,
