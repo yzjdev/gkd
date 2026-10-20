@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -16,6 +17,7 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -25,8 +27,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -61,13 +63,18 @@ fun UpsertRuleGroupPage(
     }
     val draft by vm.draft.collectAsStateWithLifecycle()
     val visualDraft by vm.visualDraft.collectAsStateWithLifecycle()
-    var blankPage by rememberSaveable { mutableStateOf(false) }
+    // 默认进入可视化编辑，用户可切回 JSON 文本编辑。
+    var blankPage by rememberSaveable { mutableStateOf(true) }
     val visualTarget = when {
         vm.isAddAnyApp -> VisualTarget.NewApp
         vm.appId != null -> VisualTarget.AppGroup
         else -> VisualTarget.GlobalGroup
     }
     GkSubscriptionPageContent(vm.uiState, mainVm.navigator::pop) { data ->
+        // 默认可视化：数据就绪后按已有规则初始化草稿，避免编辑时从空表单开始。
+        if (blankPage) {
+            LaunchedEffect(Unit) { vm.startVisualDraft() }
+        }
         val text = draft ?: data.initialText
         val visualText = visualDraft?.let { RuleVisualDraft.toJson5(it, visualTarget) }
         val saveText = if (blankPage) visualText else text
@@ -120,27 +127,38 @@ fun UpsertRuleGroupPage(
                     draft = visualDraft ?: VisualRuleGroupDraft(),
                     target = visualTarget,
                     onDraftChange = vm::setVisualDraft,
-                    modifier = Modifier.scaffoldPadding(paddingValues).fillMaxSize()
-                        .then(inputInsets),
+                    modifier = Modifier.scaffoldPadding(paddingValues).fillMaxSize(),
+                    // 只让正文避让输入法，顶部 Tab 保持不动。
+                    contentInsets = inputInsets,
                     generated = visualText,
                 )
                 return@GkEditor
             }
+            // 代码编辑面用轻 tonal 底，四周留出页边距，不再贴边。
+            val editorSurface = MaterialTheme.colorScheme.surfaceContainerLow
             val textColors =
                 TextFieldDefaults.colors(
+                    focusedContainerColor = editorSurface,
+                    unfocusedContainerColor = editorSurface,
                     focusedIndicatorColor = Color.Transparent,
                     unfocusedIndicatorColor = Color.Transparent,
                     errorIndicatorColor = Color.Transparent,
                     disabledIndicatorColor = Color.Transparent,
                 )
             BoxWithConstraints(
-                modifier = Modifier.scaffoldPadding(paddingValues).fillMaxSize(),
+                // 容器整体避让输入法，编辑框随视口收缩，不要在框内再留一份空白。
+                modifier = Modifier.scaffoldPadding(paddingValues).fillMaxSize().padding(8.dp)
+                    .then(inputInsets),
             ) {
                 val availableWidth = maxWidth
                 val horizontalScroll = rememberScrollState()
                 val textMeasurer = rememberTextMeasurer()
                 val density = LocalDensity.current
-                val editorTextStyle = MaterialTheme.typography.bodyLarge
+                // 代码区用等宽字体，与 JSON5 语法着色配合。
+                val bodyLarge = MaterialTheme.typography.bodyLarge
+                val editorTextStyle = remember(bodyLarge) {
+                    bodyLarge.copy(fontFamily = FontFamily.Monospace)
+                }
                 // 编辑框不自动折行：按最长行撑开宽度，超出屏幕时整体横向滚动。
                 val longestLineWidth = remember(text, editorTextStyle, density) {
                     if (text.length > JSON5_LARGE_TEXT_THRESHOLD) {
@@ -164,9 +182,8 @@ fun UpsertRuleGroupPage(
                             onValueChange = vm::setDraft,
                             modifier = Modifier.autoFocus(immediateFocus = true)
                                 .width(editorWidth)
-                                .fillMaxHeight()
-                                .then(inputInsets),
-                            shape = RectangleShape,
+                                .fillMaxHeight(),
+                            shape = RoundedCornerShape(12.dp),
                             colors = textColors,
                             visualTransformation = getJson5Transformation(LocalDarkTheme.current),
                             placeholder = {
@@ -183,13 +200,13 @@ fun UpsertRuleGroupPage(
                     Text(
                         text = text.length.toString(),
                         modifier =
-                            Modifier.padding(8.dp)
+                            Modifier.padding(12.dp)
                                 .align(Alignment.TopEnd)
-                                .clip(MaterialTheme.shapes.extraSmall)
-                                .background(MaterialTheme.colorScheme.surfaceContainer)
-                                .padding(horizontal = 2.dp),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.tertiary,
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }

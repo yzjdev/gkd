@@ -1,23 +1,37 @@
 package li.gkd.app.ui.subscription
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.PrimaryScrollableTabRow
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -31,6 +45,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.state.ToggleableState
@@ -42,8 +60,8 @@ import li.gkd.app.resources.*
 import li.gkd.app.ui.component.GkIcon
 import li.gkd.app.ui.component.GkIconButton
 import li.gkd.app.ui.component.GkIcons
-import li.gkd.app.ui.component.GkOutlinedTextField
 import li.gkd.app.ui.component.GkPageBottomSpace
+import li.gkd.app.ui.style.surfaceCardColors
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 
@@ -64,6 +82,8 @@ fun RuleVisualEditor(
     target: VisualTarget,
     onDraftChange: (VisualRuleGroupDraft) -> Unit,
     modifier: Modifier = Modifier,
+    /** 只作用于正文滚动区：顶部 Tab 固定不动，避免键盘弹出时整页被顶起。 */
+    contentInsets: Modifier = Modifier,
     generated: String? = null,
 ) {
     val steps = remember(draft.rules.size, target) { buildSteps(draft.rules.size, target) }
@@ -86,28 +106,71 @@ fun RuleVisualEditor(
     Column(modifier = modifier.fillMaxSize()) {
         PrimaryScrollableTabRow(
             selectedTabIndex = pagerState.currentPage.coerceIn(steps.indices),
-            edgePadding = 8.dp,
+            containerColor = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            edgePadding = 12.dp,
+            indicator = {},
+            divider = {},
         ) {
             steps.forEachIndexed { index, step ->
+                val selected = pagerState.currentPage == index
                 Tab(
-                    selected = pagerState.currentPage == index,
+                    selected = selected,
                     onClick = { scope.launch { pagerState.animateScrollToPage(index) } },
-                    text = { Text(stepTitle(step, target), maxLines = 1) },
+                    modifier = Modifier
+                        .padding(horizontal = 4.dp, vertical = 6.dp)
+                        .clip(RoundedCornerShape(50))
+                        .background(
+                            if (selected) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.surfaceContainerHigh
+                        ),
+                    selectedContentColor = MaterialTheme.colorScheme.onPrimary,
+                    unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    text = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            GkIcon(
+                                imageVector = stepIcon(step, target),
+                                modifier = Modifier.size(18.dp),
+                                contentDescription = null,
+                            )
+                            Text(stepTitle(step, target), maxLines = 1)
+                        }
+                    },
                 )
             }
         }
+        val density = LocalDensity.current
+        // 仅用于收起页尾留白：键盘高度大于 0 即视为已弹出。
+        val imeVisible = WindowInsets.ime.getBottom(density) > 0
         HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { index ->
             val step = steps[index.coerceIn(steps.indices)]
             Column(
-                modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                // insets 位于 verticalScroll 之前：视口随键盘收缩，内容仍可滚动。
+                modifier = Modifier.fillMaxSize().then(contentInsets)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                Text(
-                    text = stringResource(Res.string.rule_visual_required_note),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    GkIcon(
+                        imageVector = GkIcons.Info,
+                        modifier = Modifier.size(14.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        contentDescription = null,
+                    )
+                    Text(
+                        text = stringResource(Res.string.rule_visual_required_note),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 when (step) {
                     is VisualStep.Group -> GroupPage(
                         draft = draft,
@@ -143,7 +206,10 @@ fun RuleVisualEditor(
 
                     VisualStep.Preview -> GeneratedPage(generated)
                 }
-                GkPageBottomSpace()
+                // 键盘弹起时页尾留白会变成输入框与键盘之间的空档，此时收起。
+                if (!imeVisible) {
+                    GkPageBottomSpace()
+                }
             }
         }
     }
@@ -164,6 +230,24 @@ private fun stepTitle(step: VisualStep, target: VisualTarget): String = when (st
     is VisualStep.Group -> stringResource(sectionTitle(step.section, target))
     is VisualStep.Rule -> stringResource(Res.string.rule_visual_rule_index, step.position + 1)
     VisualStep.Preview -> stringResource(Res.string.rule_visual_generated)
+}
+
+private fun stepIcon(step: VisualStep, target: VisualTarget): ImageVector = when (step) {
+    is VisualStep.Group -> sectionIcon(step.section, target)
+    is VisualStep.Rule -> GkIcons.Rule
+    VisualStep.Preview -> GkIcons.Code
+}
+
+/** 分区图标与 Tab 一致；作用范围按全局/应用目标区分。 */
+private fun sectionIcon(section: VisualSection, target: VisualTarget): ImageVector = when (section) {
+    VisualSection.Identity -> GkIcons.Title
+    VisualSection.Target ->
+        if (target == VisualTarget.GlobalGroup) GkIcons.CenterFocusWeak
+        else GkIcons.Apps
+
+    VisualSection.Timing -> GkIcons.Schedule
+    VisualSection.Links -> GkIcons.Link
+    VisualSection.Rules -> GkIcons.Rule
 }
 
 private fun sectionTitle(section: VisualSection, target: VisualTarget): StringResource =
@@ -187,7 +271,11 @@ private fun GroupPage(
     onValueChange: (String, String) -> Unit,
 ) {
     val fields = groupFieldsFor(target).filter { it.section == section }
-    VisualSection(sectionTitle(section, target)) {
+    VisualSection(
+        title = sectionTitle(section, target),
+        icon = sectionIcon(section, target),
+        section = section,
+    ) {
         if (section == VisualSection.Identity && target == VisualTarget.NewApp) {
             // 新建应用时先填应用 id，它属于顶层的 RawApp 而不是规则组。
             VisualText(
@@ -230,16 +318,26 @@ private fun RulePage(
             )
         )
     }
-    VisualSection(Res.string.rule_visual_section_rule) {
+    VisualSection(
+        title = Res.string.rule_visual_section_rule,
+        icon = GkIcons.Rule,
+        section = VisualSection.Rules,
+    ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Text(
-                text = stringResource(Res.string.rule_visual_rule_index, position + 1),
-                style = MaterialTheme.typography.titleSmall,
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                GkIcon(imageVector = GkIcons.Rule, contentDescription = null)
+                Text(
+                    text = stringResource(Res.string.rule_visual_rule_index, position + 1),
+                    style = MaterialTheme.typography.titleSmall,
+                )
+            }
             if (draft.rules.size > 1) {
                 GkIconButton(
                     imageVector = GkIcons.Delete,
@@ -261,6 +359,8 @@ private fun RulePage(
             FieldEditor(rule.values, field, setValue)
         }
         TextButton(onClick = onAddRule) {
+            GkIcon(imageVector = GkIcons.Add, contentDescription = null)
+            Spacer(Modifier.width(4.dp))
             Text(stringResource(Res.string.rule_visual_add_rule))
         }
     }
@@ -423,68 +523,179 @@ private fun VersionNameEditor(
 /** 最后一页：当前草稿生成的 JSON5，未填完时说明原因。 */
 @Composable
 private fun GeneratedPage(generated: String?) {
-    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+    OutlinedCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = surfaceCardColors,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    ) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Text(
-                text = generated ?: stringResource(Res.string.rule_visual_incomplete),
-                style = if (generated != null) {
-                    MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
-                } else {
-                    MaterialTheme.typography.bodySmall
-                },
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Box(
+                    modifier = Modifier.size(32.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primaryContainer),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    GkIcon(
+                        imageVector = GkIcons.Code,
+                        modifier = Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                        contentDescription = null,
+                    )
+                }
+                Text(
+                    text = stringResource(Res.string.rule_visual_generated),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            }
+            if (generated != null) {
+                Text(
+                    text = generated,
+                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                        .padding(14.dp),
+                )
+            } else {
+                Text(
+                    text = stringResource(Res.string.rule_visual_incomplete),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }
 
-/** 带标题的卡片；字段与顺序由调用方从 schema 传入。 */
+/** 分区强调色：每页一组容器色，卡片徽章、描边与焦点态共用，保证鲜艳且成体系。 */
+private data class SectionAccent(
+    val container: Color,
+    val onContainer: Color,
+)
+
+@Composable
+private fun sectionAccent(section: VisualSection): SectionAccent {
+    val scheme = MaterialTheme.colorScheme
+    return when (section) {
+        VisualSection.Identity ->
+            SectionAccent(scheme.primaryContainer, scheme.onPrimaryContainer)
+
+        VisualSection.Target ->
+            SectionAccent(scheme.secondaryContainer, scheme.onSecondaryContainer)
+
+        VisualSection.Timing ->
+            SectionAccent(scheme.tertiaryContainer, scheme.onTertiaryContainer)
+
+        VisualSection.Links ->
+            SectionAccent(scheme.primaryContainer, scheme.onPrimaryContainer)
+
+        VisualSection.Rules ->
+            SectionAccent(scheme.secondaryContainer, scheme.onSecondaryContainer)
+    }
+}
+
+/** 带图标标题的卡片；字段与顺序由调用方从 schema 传入。 */
 @Composable
 private fun VisualSection(
     title: StringResource,
+    icon: ImageVector,
+    section: VisualSection,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+    val accent = sectionAccent(section)
+    OutlinedCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.outlinedCardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        ),
+        border = BorderStroke(1.5.dp, accent.container),
+    ) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Text(
-                text = stringResource(title),
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.primary,
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Box(
+                    modifier = Modifier.size(32.dp)
+                        .clip(CircleShape)
+                        .background(accent.container),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    GkIcon(
+                        imageVector = icon,
+                        modifier = Modifier.size(18.dp),
+                        tint = accent.onContainer,
+                        contentDescription = null,
+                    )
+                }
+                Text(
+                    text = stringResource(title),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            }
             content()
         }
     }
 }
 
-/** 嵌套 data class 的子字段区，用更轻的描边区分层级。 */
+/** 嵌套 data class 的子字段区，用 tonal 底区分层级，不再叠加描边卡片。 */
 @Composable
 private fun VisualSubSection(
     title: StringResource,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text(
-                text = stringResource(title),
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            content()
-        }
+    Column(
+        modifier = Modifier.fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(
+            text = stringResource(title),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        content()
     }
 }
 
 /** 字段名按 JSON 属性名显示；规则级的 "rule." 前缀只用于表单区分，不显示。 */
 private fun fieldLabel(key: String) = key.removePrefix("rule.")
+
+/** MD3 Expressive 输入控件统一外观：16dp 大圆角、填充式 tonal 底、无描边。 */
+private val expressiveFieldShape = RoundedCornerShape(16.dp)
+
+@Composable
+private fun expressiveFieldColors() = OutlinedTextFieldDefaults.colors(
+    focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+    disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+    errorContainerColor = MaterialTheme.colorScheme.errorContainer,
+    // 填充式容器 + 聚焦时只有一圈 primary 描边，保持鲜艳但不过度叠加。
+    focusedBorderColor = MaterialTheme.colorScheme.primary,
+    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+    disabledBorderColor = MaterialTheme.colorScheme.outlineVariant,
+    errorBorderColor = MaterialTheme.colorScheme.error,
+    focusedLabelColor = MaterialTheme.colorScheme.primary,
+    unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    cursorColor = MaterialTheme.colorScheme.primary,
+)
 
 @Composable
 private fun VisualText(
@@ -496,11 +707,13 @@ private fun VisualText(
     required: Boolean = false,
     placeholder: StringResource? = null,
 ) {
-    GkOutlinedTextField(
+    OutlinedTextField(
         value = values[key],
         onValueChange = onValueChange,
         modifier = Modifier.fillMaxWidth(),
         singleLine = true,
+        shape = expressiveFieldShape,
+        colors = expressiveFieldColors(),
         label = { VisualLabel(label, required) },
         placeholder = placeholder?.let { { Text(stringResource(it)) } },
         supportingText = description?.let { { Text(stringResource(it)) } },
@@ -516,11 +729,16 @@ private fun VisualLines(
     label: String = fieldLabel(key),
     required: Boolean = false,
 ) {
-    GkOutlinedTextField(
+    OutlinedTextField(
         value = values[key],
         onValueChange = onValueChange,
         modifier = Modifier.fillMaxWidth(),
-        minLines = 2,
+        // 默认只占一行高度，输入换行后自然增高。
+        minLines = 1,
+        maxLines = 6,
+        singleLine = false,
+        shape = expressiveFieldShape,
+        colors = expressiveFieldColors(),
         label = { VisualLabel(label, required) },
         supportingText = description?.let { { Text(stringResource(it)) } },
     )
@@ -534,11 +752,13 @@ private fun VisualNumber(
     onValueChange: (String) -> Unit,
     label: String = fieldLabel(key),
 ) {
-    GkOutlinedTextField(
+    OutlinedTextField(
         value = values[key],
         onValueChange = { input -> onValueChange(input.filter { it.isDigit() || it == '-' }) },
         modifier = Modifier.fillMaxWidth(),
         singleLine = true,
+        shape = expressiveFieldShape,
+        colors = expressiveFieldColors(),
         label = { VisualLabel(label, false) },
         supportingText = description?.let { { Text(stringResource(it)) } },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -574,7 +794,10 @@ private fun VisualSwitch(
         else -> ""
     }
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainerLow)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
@@ -583,18 +806,27 @@ private fun VisualSwitch(
             Text(
                 text = description?.let { stringResource(it) + " · " + stateText } ?: stateText,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = when (raw) {
+                    "true" -> MaterialTheme.colorScheme.primary
+                    "false" -> MaterialTheme.colorScheme.error
+                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                },
             )
         }
         TriStateCheckbox(
             state = state,
             onClick = { onValueChange(next) },
             modifier = Modifier.semantics { contentDescription = stateText },
+            colors = CheckboxDefaults.colors(
+                checkedColor = MaterialTheme.colorScheme.primary,
+                uncheckedColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                checkmarkColor = MaterialTheme.colorScheme.onPrimary,
+            ),
         )
     }
 }
 
-/** 枚举字段用下拉；空值显示为「不设置」。 */
+/** 枚举字段用下拉；空值显示为「不设置」。触发框与输入框同为描边样式。 */
 @Composable
 private fun VisualChoice(
     values: VisualValues,
@@ -606,29 +838,48 @@ private fun VisualChoice(
 ) {
     var expanded by remember { mutableStateOf(false) }
     val selectedLabel = options.firstOrNull { it.first == values[key] }?.second
-    Row(
+    Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Column(modifier = Modifier.weight(1f)) {
-            VisualLabel(label, false)
-            if (description != null) {
-                Text(
-                    text = stringResource(description),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+        VisualLabel(label, false)
+        if (description != null) {
+            Text(
+                text = stringResource(description),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
         Box {
-            TextButton(onClick = { expanded = true }) {
-                Text(
-                    text = selectedLabel?.let { stringResource(it) }
-                        ?: stringResource(Res.string.rule_visual_unset),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                GkIcon(imageVector = GkIcons.UnfoldMore, contentDescription = null)
+            Surface(
+                onClick = { expanded = true },
+                modifier = Modifier.fillMaxWidth(),
+                shape = expressiveFieldShape,
+                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = selectedLabel?.let { stringResource(it) }
+                            ?: stringResource(Res.string.rule_visual_unset),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (values[key].isNullOrEmpty()) {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        } else {
+                            MaterialTheme.colorScheme.onSurface
+                        },
+                    )
+                    GkIcon(
+                        imageVector = GkIcons.UnfoldMore,
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.primary,
+                        contentDescription = null,
+                    )
+                }
             }
             DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                 options.forEach { (value, optionLabel) ->
@@ -647,10 +898,19 @@ private fun VisualChoice(
 
 @Composable
 private fun VisualLabel(label: String, required: Boolean) {
-    Text(
-        text = label + if (required) " *" else "",
-        style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
-    )
+    Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+        )
+        if (required) {
+            Text(
+                text = "*",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+    }
 }
 
 private val actionOptions: List<Pair<String, StringResource>> by lazy {
