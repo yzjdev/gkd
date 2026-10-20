@@ -1,0 +1,19 @@
+package li.gkd.app.settings
+
+import li.gkd.app.R
+
+import li.gkd.app.model.Option
+import li.gkd.app.resources.*
+import androidx.annotation.StringRes
+
+/** Explicit values are part of the persisted settings contract. */
+enum class UpdateChannel(
+    override val value: Int,
+    override val labelResource: Int,
+    val url: String,
+) : Option<Int> {
+    Stable(0, R.string.update_channel_stable, "https://registry.npmmirror.com/@gkd-kit/app/latest/files/index.json"),
+    Beta(1, R.string.update_channel_beta, "https://registry.npmmirror.com/@gkd-kit/app-beta/latest/files/index.json");
+
+    override val options get() = entries
+}

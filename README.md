@@ -68,7 +68,6 @@ GKD **默认不提供规则**，需自行添加本地规则，或者通过订阅
 ## 开发
 
 - [应用架构与依赖](docs/architecture.md)
-- [Desktop 启动与调试](gkd-app/README.md)
 - [本地数据与产物](docs/local-development.md)
 - [开发约束](AGENTS.md)
 

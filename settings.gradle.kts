@@ -19,12 +19,10 @@ plugins {
 
 rootProject.name = "gkd"
 include(
-    ":gkd-android",
+    ":app",
+    ":core",
     ":gkd-aidl",
-    ":gkd-app",
-    ":gkd-db",
     ":gkd-hidden-api",
-    ":gkd-selector",
 )
 
 dependencyResolutionManagement {

@@ -1,26 +1,19 @@
 import com.android.build.api.dsl.ApplicationExtension
-import com.android.build.api.dsl.KotlinMultiplatformAndroidLibraryTarget
 import com.android.build.api.dsl.LibraryExtension
 import com.android.build.gradle.AppPlugin
 import com.android.build.gradle.LibraryPlugin
 import li.gkd.gradle.gitInfo
 import org.jetbrains.kotlin.compose.compiler.gradle.ComposeCompilerGradlePluginExtension
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask
 import org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile
-import org.jetbrains.kotlin.gradle.targets.js.nodejs.NodeJsEnvSpec
-import org.jetbrains.kotlin.gradle.targets.js.nodejs.NodeJsPlugin
 
 plugins {
-    alias(libs.plugins.cmp) apply false
     alias(libs.plugins.google.ksp) apply false
     alias(libs.plugins.android.library) apply false
-    alias(libs.plugins.android.kotlin.multiplatform.library) apply false
     alias(libs.plugins.android.application) apply false
     alias(libs.plugins.androidx.room) apply false
     alias(libs.plugins.kotlin.serialization) apply false
-    alias(libs.plugins.kotlin.multiplatform) apply false
     alias(libs.plugins.kotlin.compose) apply false
     alias(libs.plugins.remap) apply false
     alias(libs.plugins.codeorigin) apply false
@@ -45,24 +38,15 @@ object Cfg {
         "-opt-in=kotlinx.coroutines.ExperimentalCoroutinesApi",
         "-opt-in=kotlinx.serialization.ExperimentalSerializationApi",
         "-opt-in=androidx.compose.material3.ExperimentalMaterial3Api",
+        "-opt-in=androidx.compose.material3.ExperimentalMaterial3ExpressiveApi",
         "-opt-in=androidx.compose.foundation.ExperimentalFoundationApi",
         "-opt-in=androidx.compose.ui.ExperimentalComposeUiApi",
         "-opt-in=androidx.compose.foundation.layout.ExperimentalLayoutApi",
         "-XXLanguage:+ExplicitBackingFields",
-        "-Xexpect-actual-classes",
     )
 }
 
-val androidKmpLibraryPluginId = libs.plugins.android.kotlin.multiplatform.library.get().pluginId
 val composeCompilerPluginId = libs.plugins.kotlin.compose.get().pluginId
-
-allprojects {
-    plugins.withType<NodeJsPlugin> {
-        extensions.configure<NodeJsEnvSpec> {
-            download.set(false)
-        }
-    }
-}
 
 subprojects {
     plugins.withId(composeCompilerPluginId) {
@@ -110,15 +94,6 @@ subprojects {
                 sourceCompatibility = Cfg.sourceVersion
                 targetCompatibility = Cfg.targetVersion
             }
-        }
-    }
-    plugins.withId(androidKmpLibraryPluginId) {
-        extensions.getByType(KotlinMultiplatformExtension::class.java).targets.withType(
-            KotlinMultiplatformAndroidLibraryTarget::class.java
-        ).configureEach {
-            compileSdk = Cfg.compileSdk
-            buildToolsVersion = Cfg.buildToolsVersion
-            minSdk = Cfg.minSdk
         }
     }
 }
