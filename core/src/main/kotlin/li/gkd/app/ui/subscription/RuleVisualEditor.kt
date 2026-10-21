@@ -2,19 +2,29 @@ package li.gkd.app.ui.subscription
 
 import li.gkd.app.R
 
+import androidx.annotation.StringRes
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -22,250 +32,1647 @@ import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material3.ripple
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.CheckboxDefaults
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.TriStateCheckbox
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.state.ToggleableState
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.launch
 import li.gkd.app.resources.*
-import kotlin.math.roundToInt
 import li.gkd.app.ui.component.GkIcon
-import li.gkd.app.ui.component.GkExpandableSection
-import li.gkd.app.ui.component.GkIconButton
 import li.gkd.app.ui.component.GkIcons
 import li.gkd.app.ui.component.GkPageBottomSpace
-import androidx.annotation.StringRes
-import androidx.compose.ui.res.stringResource
 
-/** 步进页：规则组属性按 schema 分区，规则各占一页。 */
-private sealed interface VisualStep {
-    data class Group(val section: VisualSection) : VisualStep
-    data class Rule(val position: Int) : VisualStep
-}
-
-/** Tab 在滚动行内的水平边界（px）。 */
-private data class TabBounds(val left: Int, val width: Int) {
-    val right: Int get() = left + width
+/** 可视化编辑器当前聚焦的层级：规则组设置或某一条规则。 */
+sealed interface VisualEditorTarget {
+    object GroupSettings : VisualEditorTarget
+    data class Rule(val index: Int) : VisualEditorTarget
 }
 
 /**
- * 可视化规则编辑器。字段集来自 [groupFieldsFor] / [ruleFieldsFor] 返回的 schema，
- * 控件由属性类型决定，因此与 data class 保持一致。
+ * 可视化规则编辑器：总览列表 + 聚焦编辑。
+ *
+ * 总览只呈现规则组摘要与每条规则的一行摘要，点击任一入口后进入该单项的
+ * 全屏编辑页。聚焦层级由调用方持有，宿主顶栏据此显示标题与返回按钮；
+ * 字段集与控件类型来自 schema，始终与 data class 一致。
  */
 @Composable
 fun RuleVisualEditor(
     draft: VisualRuleGroupDraft,
     target: VisualTarget,
     onDraftChange: (VisualRuleGroupDraft) -> Unit,
+    /** 当前聚焦层级；null 表示总览。 */
+    editing: VisualEditorTarget?,
+    onEditingChange: (VisualEditorTarget?) -> Unit,
     modifier: Modifier = Modifier,
-    /** 只作用于正文滚动区：顶部 Tab 固定不动，避免键盘弹出时整页被顶起。 */
+    /** 只作用于正文滚动区：顶栏固定不动，避免键盘弹出时整页被顶起。 */
     contentInsets: Modifier = Modifier,
 ) {
-    val steps = remember(draft.rules.size, target) { buildSteps(draft.rules.size, target) }
-    val pagerState = rememberPagerState(pageCount = { steps.size })
-    val scope = rememberCoroutineScope()
-    var pendingPage by remember { mutableStateOf<Int?>(null) }
-    // 每个 Tab 在滚动行内的边界（px），用于跟随滚动把选中 Tab 居中。
-    var tabPositions by remember { mutableStateOf(listOf<TabBounds>()) }
-    // 各页正文滚动状态：翻到新页后可将其滚回页首。
-    val pageScrollStates = remember { mutableStateMapOf<Int, ScrollState>() }
-    val values = draft.values
-    val setValue: (String, String) -> Unit = { key, value ->
-        onDraftChange(draft.copy(values = values.with(key, value)))
+    val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+    val overviewScroll = rememberScrollState()
+    // 正在编辑的规则被删除后自动退回总览。
+    val active = when (val current = editing) {
+        is VisualEditorTarget.Rule ->
+            if (draft.rules.any { it.index == current.index }) current else null
+
+        else -> current
     }
-    LaunchedEffect(steps.size, pendingPage) {
-        val next = pendingPage
-        if (next != null && next in steps.indices) {
-            pendingPage = null
-            pagerState.animateScrollToPage(next)
-            // 新规则页从页首开始浏览，避免停留在上一页的滚动位置。
-            pageScrollStates[next]?.scrollTo(0)
-        } else if (pagerState.currentPage > steps.lastIndex) {
-            pagerState.scrollToPage(steps.lastIndex)
+    Box(modifier = modifier.fillMaxSize()) {
+        when (val current = active) {
+            null -> Overview(
+                draft = draft,
+                target = target,
+                onDraftChange = onDraftChange,
+                scrollState = overviewScroll,
+                contentInsets = contentInsets,
+                imeVisible = imeVisible,
+                onOpen = onEditingChange,
+            )
+
+            VisualEditorTarget.GroupSettings -> GroupSettingsDetail(
+                draft = draft,
+                target = target,
+                onDraftChange = onDraftChange,
+                contentInsets = contentInsets,
+                imeVisible = imeVisible,
+            )
+
+            is VisualEditorTarget.Rule -> RuleDetail(
+                draft = draft,
+                target = target,
+                ruleIndex = current.index,
+                onDraftChange = onDraftChange,
+                contentInsets = contentInsets,
+                imeVisible = imeVisible,
+                onBack = { onEditingChange(null) },
+            )
         }
     }
-    Column(modifier = modifier.fillMaxSize()) {
-        // 轻量扁平 Tab：Row + clickable，避免 TabRow/Tab 组件的额外语义与指示器开销。
-        // 选中态用 currentPage 驱动：拖动跨过中线时高亮立即跟随切换。
-        val settledIndex = pagerState.currentPage.coerceIn(steps.indices)
-        val tabScrollState = rememberScrollState()
-        // Tab 行跟随：选中 Tab 超出视口时，把它滚动到可视范围中央。
-        // key 含 tabPositions.size：新增规则后新 Tab 首次完成测量也会触发一次居中。
-        LaunchedEffect(settledIndex, tabPositions.size, tabScrollState.viewportSize) {
-            val tabInfo = tabPositions.getOrNull(settledIndex) ?: return@LaunchedEffect
-            val target = (tabInfo.left + tabInfo.width / 2) - tabScrollState.viewportSize / 2
-            tabScrollState.animateScrollTo(target.coerceIn(0, tabScrollState.maxValue))
+}
+
+/** 总览：规则组摘要 + 规则摘要列表 + 新增入口。 */
+@Composable
+private fun Overview(
+    draft: VisualRuleGroupDraft,
+    target: VisualTarget,
+    onDraftChange: (VisualRuleGroupDraft) -> Unit,
+    scrollState: ScrollState,
+    contentInsets: Modifier,
+    imeVisible: Boolean,
+    onOpen: (VisualEditorTarget) -> Unit,
+) {
+    val onAddRule: () -> Unit = {
+        val nextIndex = (draft.rules.maxOfOrNull { it.index } ?: -1) + 1
+        onDraftChange(draft.copy(rules = draft.rules + VisualRuleGroupDraft.newRule(nextIndex)))
+        // 新增后直接进入该规则的聚焦编辑。
+        onOpen(VisualEditorTarget.Rule(nextIndex))
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .then(contentInsets)
+            .verticalScroll(scrollState)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        GroupSummary(
+            draft = draft,
+            target = target,
+            onClick = { onOpen(VisualEditorTarget.GroupSettings) },
+        )
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column {
+                Text(
+                    text = stringResource(R.string.rule_visual_tab_rules),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    text = stringResource(R.string.rule_visual_rules_count, draft.rules.size.toString()),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(MaterialTheme.colorScheme.surfaceContainerLow),
+            ) {
+                draft.rules.forEachIndexed { position, rule ->
+                    if (position > 0) {
+                        ThinDivider(startInset = 50.dp)
+                    }
+                    RuleSummaryRow(
+                        position = position,
+                        rule = rule,
+                        onClick = { onOpen(VisualEditorTarget.Rule(rule.index)) },
+                    )
+                }
+                if (draft.rules.isNotEmpty()) {
+                    ThinDivider(startInset = 50.dp)
+                }
+                AddRuleRow(onClick = onAddRule)
+            }
         }
-        Row(
-            modifier = Modifier.fillMaxWidth()
-                .horizontalScroll(tabScrollState)
-                .padding(horizontal = 8.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(2.dp),
-            verticalAlignment = Alignment.CenterVertically,
+        // 键盘弹起时页尾留白会变成输入框与键盘之间的空档，此时收起。
+        if (!imeVisible) {
+            GkPageBottomSpace()
+        }
+    }
+}
+
+/** 规则组摘要：名称 + 目标类型 + 启用状态，点击进入设置。 */
+@Composable
+private fun GroupSummary(
+    draft: VisualRuleGroupDraft,
+    target: VisualTarget,
+    onClick: () -> Unit,
+) {
+    val name = draft.values.text("name") ?: stringResource(R.string.rule_visual_group_untitled)
+    val enabled = draft.values.bool("enable") ?: true
+    val subtitle = listOfNotNull(
+        targetLabel(target),
+        draft.values.text(RuleVisualDraft.AppId),
+    ).joinToString("  ")
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainerLow)
+            .clickable(
+                interactionSource = null,
+                indication = ripple(),
+            ) { onClick() }
+            .padding(16.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(RoundedCornerShape(13.dp))
+                    .background(MaterialTheme.colorScheme.tertiaryContainer),
+                contentAlignment = Alignment.Center,
+            ) {
+                GkIcon(
+                    imageVector = sectionIcon(VisualSection.Target, target),
+                    modifier = Modifier.size(22.dp),
+                    tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                    contentDescription = null,
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = name,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            GkIcon(
+                imageVector = GkIcons.KeyboardArrowRight,
+                modifier = Modifier.size(20.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                contentDescription = null,
+            )
+        }
+        Spacer(Modifier.height(12.dp))
+        InfoChip(
+            text = stringResource(if (enabled) R.string.turned_on else R.string.turned_off),
+            tinted = enabled,
+        )
+    }
+}
+
+/** 摘要标签。 */
+@Composable
+private fun InfoChip(text: String, tinted: Boolean) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(
+                if (tinted) {
+                    MaterialTheme.colorScheme.secondaryContainer
+                } else {
+                    MaterialTheme.colorScheme.surfaceContainerHighest
+                }
+            )
+            .padding(horizontal = 8.dp, vertical = 3.dp),
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelSmall,
+            color = if (tinted) {
+                MaterialTheme.colorScheme.onSecondaryContainer
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
+        )
+    }
+}
+
+/** 规则摘要行：序号 + 名称 + 动作与选择器预览，点击进入该规则的聚焦编辑。 */
+@Composable
+private fun RuleSummaryRow(
+    position: Int,
+    rule: VisualRuleDraft,
+    onClick: () -> Unit,
+) {
+    val name = rule.values.text("name") ?: stringResource(R.string.rule_visual_rule_untitled)
+    val actionLabel = rule.values.text("action")
+        ?.let { value -> RuleVisualAction.entries.firstOrNull { it.value == value }?.labelResource }
+        ?.let { stringResource(it) }
+    val selectorCount = rule.values.lines("matches").size
+    val subtitle = listOfNotNull(
+        actionLabel,
+        if (selectorCount > 0) {
+            stringResource(R.string.rule_visual_selector_count, selectorCount.toString())
+        } else {
+            null
+        },
+    ).joinToString("  ")
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(
+                interactionSource = null,
+                indication = ripple(),
+            ) { onClick() }
+            .padding(horizontal = 12.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(26.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(MaterialTheme.colorScheme.primaryContainer),
+            contentAlignment = Alignment.Center,
         ) {
-            steps.forEachIndexed { index, step ->
-                val selected = settledIndex == index
+            Text(
+                text = (position + 1).toString(),
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+            )
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = name,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (subtitle.isNotEmpty()) {
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        GkIcon(
+            imageVector = GkIcons.KeyboardArrowRight,
+            modifier = Modifier.size(18.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            contentDescription = null,
+        )
+    }
+}
+
+/** 列表末尾的新增入口。 */
+@Composable
+private fun AddRuleRow(onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(
+                interactionSource = null,
+                indication = ripple(),
+            ) { onClick() }
+            .padding(horizontal = 12.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier.size(26.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            GkIcon(
+                imageVector = GkIcons.Add,
+                modifier = Modifier.size(18.dp),
+                tint = MaterialTheme.colorScheme.tertiary,
+                contentDescription = null,
+            )
+        }
+        Spacer(Modifier.width(12.dp))
+        Text(
+            text = stringResource(R.string.rule_visual_add_rule),
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.tertiary,
+        )
+    }
+}
+
+/** 规则组设置的聚焦编辑页。 */
+@Composable
+private fun GroupSettingsDetail(
+    draft: VisualRuleGroupDraft,
+    target: VisualTarget,
+    onDraftChange: (VisualRuleGroupDraft) -> Unit,
+    contentInsets: Modifier,
+    imeVisible: Boolean,
+) {
+    val setValue: (String, String) -> Unit = { key, value ->
+        onDraftChange(draft.copy(values = draft.values.with(key, value)))
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .then(contentInsets)
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(20.dp),
+    ) {
+        // 分区顺序固定为「身份 → 作用范围 → 计时 → 链接」。
+        val present = groupFieldsFor(target).mapTo(mutableSetOf()) { it.section }
+        listOf(VisualSection.Identity, VisualSection.Target, VisualSection.Timing, VisualSection.Links)
+            .filter { it in present }
+            .forEach { section ->
+                SettingSection(
+                    values = draft.values,
+                    section = section,
+                    target = target,
+                    onValueChange = setValue,
+                )
+            }
+        // 键盘弹起时页尾留白会变成输入框与键盘之间的空档，此时收起。
+        if (!imeVisible) {
+            GkPageBottomSpace()
+        }
+    }
+}
+
+/** 单条规则的聚焦编辑页。 */
+@Composable
+private fun RuleDetail(
+    draft: VisualRuleGroupDraft,
+    target: VisualTarget,
+    ruleIndex: Int,
+    onDraftChange: (VisualRuleGroupDraft) -> Unit,
+    contentInsets: Modifier,
+    imeVisible: Boolean,
+    onBack: () -> Unit,
+) {
+    val position = draft.rules.indexOfFirst { it.index == ruleIndex }
+    val rule = draft.rules.getOrNull(position) ?: return
+    val setValue: (String, String) -> Unit = { key, value ->
+        onDraftChange(
+            draft.copy(
+                rules = draft.rules.map { item ->
+                    if (item.index == rule.index) {
+                        item.copy(values = item.values.with(key, value))
+                    } else {
+                        item
+                    }
+                },
+            )
+        )
+    }
+    val onRemove: () -> Unit = {
+        onDraftChange(draft.copy(rules = draft.rules.filterIndexed { i, _ -> i != position }))
+        onBack()
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .then(contentInsets)
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+    ) {
+        RenderFieldBlocks(
+            values = rule.values,
+            fields = ruleFieldsFor(target),
+            onValueChange = setValue,
+        )
+        if (draft.rules.size > 1) {
+            Spacer(Modifier.height(20.dp))
+            RemoveRuleRow(onClick = onRemove)
+        }
+        // 键盘弹起时页尾留白会变成输入框与键盘之间的空档，此时收起。
+        if (!imeVisible) {
+            GkPageBottomSpace()
+        }
+    }
+}
+
+/** 删除当前规则。 */
+@Composable
+private fun RemoveRuleRow(onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .border(
+                width = 1.dp,
+                color = MaterialTheme.colorScheme.error.copy(alpha = 0.45f),
+                shape = RoundedCornerShape(10.dp),
+            )
+            .clickable(
+                interactionSource = null,
+                indication = ripple(),
+            ) { onClick() }
+            .padding(vertical = 12.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        GkIcon(
+            imageVector = GkIcons.Delete,
+            modifier = Modifier.size(18.dp),
+            tint = MaterialTheme.colorScheme.error,
+            contentDescription = null,
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(
+            text = stringResource(R.string.rule_visual_remove_rule),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.error,
+        )
+    }
+}
+
+/** 一个设置分区：左侧强调竖条 + 图标标题 + 说明，字段为扁平列表。 */
+@Composable
+private fun SettingSection(
+    values: VisualValues,
+    section: VisualSection,
+    target: VisualTarget,
+    onValueChange: (String, String) -> Unit,
+) {
+    val fields = groupFieldsFor(target).filter { it.section == section }
+    Column {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(IntrinsicSize.Min),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(3.dp)
+                    .fillMaxHeight()
+                    .clip(RoundedCornerShape(1.5.dp))
+                    .background(MaterialTheme.colorScheme.tertiary),
+            )
+            Spacer(Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
                 Row(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(
-                            if (selected) MaterialTheme.colorScheme.tertiaryContainer
-                            else Color.Transparent
-                        )
-                        .clickable(
-                            interactionSource = null,
-                            indication = ripple(),
-                        ) { scope.launch { pagerState.animateScrollToPage(index) } }
-                        .padding(horizontal = 10.dp, vertical = 8.dp)
-                        // 记录每个 Tab 在行内的位置与宽度，供跟随滚动计算。
-                        .onGloballyPositioned { coordinates ->
-                            val offset = coordinates.positionInParent()
-                            val width = coordinates.size.width
-                            val updated = tabPositions.toMutableList().apply {
-                                while (size <= index) add(TabBounds(0, 0))
-                                this[index] = TabBounds(offset.x.roundToInt(), width)
-                            }
-                            tabPositions = updated
-                        },
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    val tabColor = if (selected) MaterialTheme.colorScheme.onTertiaryContainer
-                    else MaterialTheme.colorScheme.onSurfaceVariant
                     GkIcon(
-                        imageVector = stepIcon(step, target),
-                        modifier = Modifier.size(14.dp),
-                        tint = tabColor,
+                        imageVector = sectionIcon(section, target),
+                        modifier = Modifier.size(15.dp),
+                        tint = MaterialTheme.colorScheme.tertiary,
                         contentDescription = null,
                     )
                     Text(
-                        stepTitle(step, target),
-                        maxLines = 1,
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                        color = tabColor,
+                        text = stringResource(sectionTitle(section, target)),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
                     )
+                }
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = stringResource(sectionDescription(section, target)),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        RenderFieldBlocks(
+            values = values,
+            fields = fields,
+            onValueChange = onValueChange,
+            leading = if (section == VisualSection.Identity && target == VisualTarget.NewApp) {
+                // 新建应用时先填应用 id，它属于顶层的 RawApp 而不是规则组。
+                {
+                    LabeledField(
+                        label = RuleVisualDraft.AppId,
+                        description = R.string.rule_help_p_apps,
+                        required = true,
+                    ) {
+                        EditorTextField(
+                            value = values[RuleVisualDraft.AppId],
+                            onValueChange = { onValueChange(RuleVisualDraft.AppId, it) },
+                            singleLine = true,
+                            placeholder = R.string.rule_visual_app_id_hint,
+                        )
+                    }
+                }
+            } else {
+                null
+            },
+        )
+    }
+}
+
+/**
+ * 字段块：按 schema 顺序把连续同类字段合并成渲染单位。
+ * 嵌套 data class 字段（position/swipe/version*）自带折叠分组，单独成块。
+ */
+private sealed interface FieldBlock {
+    data class Plain(val fields: List<VisualField>) : FieldBlock
+    data class Sub(val subGroup: VisualSubGroup, val fields: List<VisualField>) : FieldBlock
+    data class Self(val field: VisualField) : FieldBlock
+    /** 按用途收拢成组的平铺字段，组内共用一个折叠分组。 */
+    data class Group(val group: FieldGroupDef, val fields: List<VisualField>) : FieldBlock
+    /** 四个匹配选择器共用一组标签与输入框，整体折叠成一组。 */
+    data class Selectors(val fields: List<VisualField>) : FieldBlock
+}
+
+/**
+ * 一组同用途的平铺字段：schema 里它们是散在普通字段中的，
+ * 这里按名字收进一个折叠分组，避免与其它零散字段混在一起。
+ */
+private data class FieldGroupDef(
+    val id: String,
+    @StringRes val title: Int,
+    val icon: ImageVector,
+    val names: List<String>,
+    /** 分组一律默认收起，避免长表单首次进入时铺满屏幕。 */
+    val expanded: Boolean = false,
+)
+
+private val basicFieldGroup = FieldGroupDef(
+    id = "basic",
+    title = R.string.rule_visual_section_identity_fields,
+    icon = GkIcons.Key,
+    // 组级另有 desc / enable / scopeKeys，规则级则是 preKeys；
+    // 两者互不重叠，共用一个定义即可。
+    names = listOf("key", "name", "desc", "enable", "scopeKeys", "preKeys"),
+)
+
+private val actionFieldGroup = FieldGroupDef(
+    id = "action",
+    title = R.string.rule_visual_section_action,
+    icon = GkIcons.PlayArrow,
+    names = listOf("action"),
+)
+
+private val orderFieldGroup = FieldGroupDef(
+    id = "order",
+    title = R.string.rule_visual_section_order,
+    icon = GkIcons.Sort,
+    names = listOf("order"),
+)
+
+private val fieldGroupDefs = listOf(basicFieldGroup, actionFieldGroup, orderFieldGroup)
+
+private fun VisualField.fieldGroupDef(): FieldGroupDef? =
+    fieldGroupDefs.firstOrNull { name in it.names }
+
+private fun VisualField.isSelfCarding(): Boolean = when (control) {
+    VisualControl.Position,
+    VisualControl.SwipeArg,
+    VisualControl.VersionCode,
+    VisualControl.VersionName -> true
+
+    else -> false
+}
+
+private fun fieldBlocks(fields: List<VisualField>): List<FieldBlock> = buildList {
+    fields.forEach { field ->
+        when {
+            field.isSelfCarding() -> add(FieldBlock.Self(field))
+            field.name in selectorFieldNames -> {
+                // 四个选择器合成一组，无论中间是否夹了别的字段。
+                val existing = indexOfLast { it is FieldBlock.Selectors }
+                if (existing >= 0) {
+                    val block = get(existing) as FieldBlock.Selectors
+                    set(existing, block.copy(fields = block.fields + field))
+                } else {
+                    add(FieldBlock.Selectors(listOf(field)))
+                }
+            }
+            field.fieldGroupDef() != null -> {
+                val group = field.fieldGroupDef()!!
+                val existing = indexOfLast { it is FieldBlock.Group && it.group.id == group.id }
+                if (existing >= 0) {
+                    val block = get(existing) as FieldBlock.Group
+                    set(existing, block.copy(fields = block.fields + field))
+                } else {
+                    add(FieldBlock.Group(group, listOf(field)))
+                }
+            }
+            field.subGroup != null -> {
+                val subGroup = field.subGroup!!
+                // 同一子分组只输出一次：schema 中会有非本组的字段（如 order）夹在
+                // 同组字段中间，若只在相邻时合并，就会切出两个同名分组。
+                val existing = indexOfLast { it is FieldBlock.Sub && it.subGroup == subGroup }
+                if (existing >= 0) {
+                    val block = get(existing) as FieldBlock.Sub
+                    set(existing, block.copy(fields = block.fields + field))
+                } else {
+                    add(FieldBlock.Sub(subGroup, listOf(field)))
+                }
+            }
+            else -> {
+                val last = lastOrNull()
+                if (last is FieldBlock.Plain) {
+                    removeAt(lastIndex)
+                    add(last.copy(fields = last.fields + field))
+                } else {
+                    add(FieldBlock.Plain(listOf(field)))
                 }
             }
         }
-        val density = LocalDensity.current
-        // 仅用于收起页尾留白：键盘高度大于 0 即视为已弹出。
-        val imeVisible = WindowInsets.ime.getBottom(density) > 0
-        HorizontalPager(
-            state = pagerState,
-            modifier = Modifier.fillMaxSize(),
-            // 预组合相邻页：切页时两侧内容已就绪，避免滑入过程中现场构建组合导致掉帧。
-            beyondViewportPageCount = 1,
-        ) { index ->
-            val step = steps[index.coerceIn(steps.indices)]
-            val pageScroll = remember(index) { ScrollState(0) }.also { pageScrollStates[index] = it }
-            Column(
-                // insets 位于 verticalScroll 之前：视口随键盘收缩，内容仍可滚动。
-                modifier = Modifier.fillMaxSize().then(contentInsets)
-                    .verticalScroll(pageScroll)
-                    .padding(horizontal = 12.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                when (step) {
-                    is VisualStep.Group -> GroupPage(
-                        draft = draft,
-                        target = target,
-                        section = step.section,
-                        onValueChange = setValue,
-                    )
+    }
+    // 参考链接是纯参考资料，固定排到最后，不参与前面的编辑顺序。
+    val linksIndex = indexOfFirst { it is FieldBlock.Sub && it.subGroup == VisualSubGroup.RefLinks }
+    if (linksIndex >= 0 && linksIndex != lastIndex) {
+        val links = removeAt(linksIndex)
+        add(links)
+    }
+}
 
-                    is VisualStep.Rule -> RulePage(
-                        draft = draft,
-                        position = step.position,
-                        target = target,
-                        onDraftChange = onDraftChange,
-                        onAddRule = {
-                            val nextIndex = (draft.rules.maxOfOrNull { it.index } ?: -1) + 1
-                            onDraftChange(
-                                draft.copy(
-                                    rules = draft.rules + VisualRuleGroupDraft.newRule(nextIndex),
-                                )
-                            )
-                            val nextSteps = buildSteps(draft.rules.size + 1, target)
-                            val lastRule = nextSteps.indexOfLast { it is VisualStep.Rule }
-                            pendingPage = lastRule
-                        },
-                        onRemoveRule = {
-                            val remaining = draft.rules.filterIndexed { i, _ -> i != step.position }
-                            onDraftChange(draft.copy(rules = remaining))
-                            val nextSteps = buildSteps(remaining.size, target)
-                            val adjacent = step.position.coerceAtMost(remaining.lastIndex)
-                            pendingPage = nextSteps.indexOf(VisualStep.Rule(adjacent))
-                        },
+/**
+ * 按字段块顺序渲染扁平列表：平铺字段逐行输出，子分组进折叠分组，
+ * 自分组字段直接输出；行与行之间以细分隔线区隔。
+ */
+@Composable
+private fun RenderFieldBlocks(
+    values: VisualValues,
+    fields: List<VisualField>,
+    onValueChange: (String, String) -> Unit,
+    leading: (@Composable () -> Unit)? = null,
+) {
+    val blocks = remember(fields) { fieldBlocks(fields) }
+    Column(modifier = Modifier.fillMaxWidth()) {
+        var first = true
+        if (leading != null) {
+            leading()
+            first = false
+        }
+        blocks.forEach { block ->
+            when (block) {
+                is FieldBlock.Self -> {
+                    if (!first) {
+                        ThinDivider()
+                    }
+                    first = false
+                    SelfGroup(field = block.field, values = values, onValueChange = onValueChange)
+                }
+
+                is FieldBlock.Sub -> {
+                    if (!first) {
+                        ThinDivider()
+                    }
+                    first = false
+                    ConvergedFieldGroup(
+                        icon = subGroupIcon(block.subGroup),
+                        title = block.subGroup.title,
+                        values = values,
+                        fields = block.fields,
+                        onValueChange = onValueChange,
                     )
                 }
-                // 键盘弹起时页尾留白会变成输入框与键盘之间的空档，此时收起。
-                if (!imeVisible) {
-                    GkPageBottomSpace()
+
+                is FieldBlock.Group -> {
+                    if (!first) {
+                        ThinDivider()
+                    }
+                    first = false
+                    ConvergedFieldGroup(
+                        icon = block.group.icon,
+                        title = block.group.title,
+                        values = values,
+                        fields = block.fields,
+                        onValueChange = onValueChange,
+                        expanded = block.group.expanded,
+                    )
+                }
+
+                is FieldBlock.Selectors -> {
+                    if (!first) {
+                        ThinDivider()
+                    }
+                    first = false
+                    // 选择器是规则的核心内容，默认展开；其余分组保持收起。
+                    CollapsibleGroup(
+                        GkIcons.Search,
+                        R.string.rule_visual_section_selectors,
+                        initiallyExpanded = true,
+                    ) {
+                        SelectorField(values = values, onValueChange = onValueChange)
+                    }
+                }
+
+                is FieldBlock.Plain -> {
+                    block.fields.forEach { field ->
+                        if (!first) {
+                            ThinDivider()
+                        }
+                        first = false
+                        FieldRow(
+                            values = values,
+                            field = field,
+                            onValueChange = onValueChange,
+                        )
+                    }
                 }
             }
         }
     }
 }
 
-/** 分区顺序固定为「身份 → 作用范围 → 计时 → 链接」，规则紧随其后。 */
-private fun buildSteps(ruleCount: Int, target: VisualTarget): List<VisualStep> = buildList {
-    val present = groupFieldsFor(target).mapTo(mutableSetOf()) { it.section }
-    listOf(VisualSection.Identity, VisualSection.Target, VisualSection.Timing, VisualSection.Links)
-        .filter { it in present }
-        .forEach { add(VisualStep.Group(it)) }
-    repeat(ruleCount) { add(VisualStep.Rule(it)) }
+/** 列表与字段之间的细分隔线；[startInset] 用于与列表文字左对齐。 */
+@Composable
+private fun ThinDivider(startInset: Dp = 0.dp) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = startInset)
+            .height(1.dp)
+            .background(MaterialTheme.colorScheme.outlineVariant),
+    )
+}
+
+/**
+ * 收敛式字段分组：所有字段名以分段标签排列，同一时刻只展开一个字段的编辑器。
+ * 字段类型决定编辑器形态（三态胶囊 / 下拉 / 单行或多行输入），避免逐个纵向堆叠。
+ */
+@Composable
+private fun ConvergedFieldGroup(
+    icon: ImageVector,
+    @StringRes title: Int,
+    values: VisualValues,
+    fields: List<VisualField>,
+    onValueChange: (String, String) -> Unit,
+    expanded: Boolean = false,
+) {
+    if (fields.isEmpty()) return
+    var selected by remember(fields) { mutableStateOf(fields.first().name) }
+    val active = fields.firstOrNull { it.name == selected } ?: fields.first()
+    CollapsibleGroup(icon, title, initiallyExpanded = expanded) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 6.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            // 只有一个字段时分组标题已说明用途，不再显示单个分段标签。
+            if (fields.size > 1) {
+                ChipRows(
+                    labels = fields.map { it.name },
+                    selectedIndex = fields.indexOf(active),
+                    onSelect = { selected = fields[it].name },
+                )
+            }
+            // 字段名已由上方分段标签标出，这里不再重复。
+            FieldRow(
+                values = values,
+                field = active,
+                onValueChange = onValueChange,
+                showLabel = false,
+            )
+        }
+    }
+}
+
+/** 选择器模式：四个列表共用一个输入框，分段切换当前编辑的列表。 */
+private data class SelectorMode(
+    val name: String,
+    @StringRes val label: Int,
+    @StringRes val description: Int,
+    val required: Boolean = false,
+)
+
+private val selectorModes = listOf(
+    SelectorMode(
+        name = "matches",
+        label = R.string.rule_visual_selector_matches,
+        description = R.string.rule_help_p_matches,
+        required = true,
+    ),
+    SelectorMode(
+        name = "excludeMatches",
+        label = R.string.rule_visual_selector_exclude,
+        description = R.string.rule_help_p_exclude_matches,
+    ),
+    SelectorMode(
+        name = "excludeAllMatches",
+        label = R.string.rule_visual_selector_exclude_all,
+        description = R.string.rule_help_p_exclude_all_matches,
+    ),
+    SelectorMode(
+        name = "anyMatches",
+        label = R.string.rule_visual_selector_any,
+        description = R.string.rule_help_p_any_matches,
+    ),
+)
+
+private val selectorFieldNames = selectorModes.mapTo(mutableSetOf()) { it.name }
+
+/**
+ * 四个选择器列表共用一个输入框：上方分段切换当前编辑的列表，
+ * 下方始终复用同一个输入框，避免四份几乎相同的长文本框挤占页面。
+ */
+@Composable
+private fun SelectorField(
+    values: VisualValues,
+    onValueChange: (String, String) -> Unit,
+) {
+    var mode by remember { mutableStateOf(selectorModes.first()) }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 9.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        ChipRows(
+            labels = selectorModes.map { stringResource(it.label) },
+            selectedIndex = selectorModes.indexOf(mode),
+            onSelect = { mode = selectorModes[it] },
+        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = stringResource(mode.description),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
+            )
+            if (mode.required) {
+                Spacer(Modifier.width(2.dp))
+                Text(
+                    text = "*",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+        }
+        EditorTextField(
+            value = values[mode.name],
+            onValueChange = { onValueChange(mode.name, it) },
+            singleLine = false,
+            monospace = true,
+        )
+    }
+}
+
+/**
+ * 按字段的控件类型渲染一行；类型来自 data class 的声明。
+ * [showLabel] 为 false 时不重复字段名，供收敛分组使用。
+ */
+@Composable
+private fun FieldRow(
+    values: VisualValues,
+    field: VisualField,
+    onValueChange: (String, String) -> Unit,
+    showLabel: Boolean = true,
+) {
+    val set: (String) -> Unit = { onValueChange(field.name, it) }
+    when (field.control) {
+        VisualControl.Bool -> TriStateField(
+            values = values,
+            key = field.name,
+            description = field.description,
+            onValueChange = set,
+            showLabel = showLabel,
+        )
+
+        VisualControl.Int, VisualControl.Long -> LabeledField(
+            label = field.name,
+            description = field.description,
+            required = field.required,
+            showLabel = showLabel,
+        ) {
+            EditorTextField(
+                value = values[field.name],
+                onValueChange = set,
+                singleLine = true,
+                number = true,
+            )
+        }
+
+        VisualControl.Text -> LabeledField(
+            label = field.name,
+            description = field.description,
+            required = field.required,
+            showLabel = showLabel,
+        ) {
+            EditorTextField(
+                value = values[field.name],
+                onValueChange = set,
+                singleLine = true,
+            )
+        }
+
+        VisualControl.Action -> ChoiceField(
+            values = values,
+            key = field.name,
+            description = field.description,
+            options = actionOptions,
+            onValueChange = set,
+            showLabel = showLabel,
+        )
+
+        VisualControl.ResetMatch -> ChoiceField(
+            values = values,
+            key = field.name,
+            description = field.description,
+            options = resetMatchOptions,
+            onValueChange = set,
+            showLabel = showLabel,
+        )
+
+        VisualControl.TextList, VisualControl.IntList, VisualControl.Apps -> LabeledField(
+            label = field.name,
+            description = field.description,
+            required = field.required,
+            showLabel = showLabel,
+        ) {
+            EditorTextField(
+                value = values[field.name],
+                onValueChange = set,
+                singleLine = false,
+            )
+        }
+
+        // position/swipe/version 等自分组字段由 FieldBlock.Self 承载，不会走到这里。
+        VisualControl.Position,
+        VisualControl.SwipeArg,
+        VisualControl.VersionCode,
+        VisualControl.VersionName,
+        VisualControl.Rules -> Unit
+    }
+}
+
+/**
+ * 字段行：等宽字段名 + 必填标记 + 说明，控件在下。
+ * [showLabel] 为 false 时省略字段名——收敛分组已用分段标签标出当前字段。
+ */
+@Composable
+private fun LabeledField(
+    label: String,
+    @StringRes description: Int?,
+    required: Boolean,
+    showLabel: Boolean = true,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 9.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        if (showLabel) {
+            Row {
+                Text(
+                    text = fieldLabel(label),
+                    style = MaterialTheme.typography.labelMedium.copy(fontFamily = FontFamily.Monospace),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (required) {
+                    Spacer(Modifier.width(3.dp))
+                    Text(
+                        text = "*",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+        }
+        if (description != null) {
+            Text(
+                text = stringResource(description),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        content()
+    }
+}
+
+/** 编辑输入框：填充式圆角容器，无指示线，无浮动 label。 */
+@Composable
+private fun EditorTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    singleLine: Boolean,
+    monospace: Boolean = false,
+    number: Boolean = false,
+    @StringRes placeholder: Int? = null,
+) {
+    val textStyle = if (monospace) {
+        MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace)
+    } else {
+        MaterialTheme.typography.bodyMedium
+    }
+    CompositionLocalProvider(LocalTextStyle provides textStyle) {
+        TextField(
+            value = value,
+            onValueChange = { input ->
+                onValueChange(if (number) input.filter { it.isDigit() || it == '-' } else input)
+            },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = singleLine,
+            minLines = 1,
+            maxLines = if (singleLine) 1 else 6,
+            shape = RoundedCornerShape(10.dp),
+            colors = filledFieldColors(),
+            placeholder = placeholder?.let { res -> { Text(stringResource(res)) } },
+            keyboardOptions = if (number) {
+                KeyboardOptions(keyboardType = KeyboardType.Number)
+            } else {
+                KeyboardOptions.Default
+            },
+        )
+    }
 }
 
 @Composable
-private fun stepTitle(step: VisualStep, target: VisualTarget): String = when (step) {
-    is VisualStep.Group -> stringResource(sectionTitle(step.section, target))
-    is VisualStep.Rule -> stringResource(R.string.rule_visual_rule_index, step.position + 1)
+private fun filledFieldColors() = TextFieldDefaults.colors(
+    focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+    disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+    errorContainerColor = MaterialTheme.colorScheme.errorContainer,
+    focusedIndicatorColor = Color.Transparent,
+    unfocusedIndicatorColor = Color.Transparent,
+    disabledIndicatorColor = Color.Transparent,
+    errorIndicatorColor = Color.Transparent,
+    focusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    cursorColor = MaterialTheme.colorScheme.primary,
+)
+
+/**
+ * 布尔字段用三态胶囊：跟随 = 未设置（不写入该字段），开 = `true`，关 = `false`。
+ * 比复选框更直观地表达「继承组默认值」这一中间态。
+ */
+@Composable
+private fun TriStateField(
+    values: VisualValues,
+    key: String,
+    @StringRes description: Int?,
+    onValueChange: (String) -> Unit,
+    showLabel: Boolean = true,
+) {
+    val raw = values[key]
+    LabeledField(
+        label = key,
+        description = description,
+        required = false,
+        showLabel = showLabel,
+    ) {
+        val labels = listOf(
+            stringResource(R.string.rule_visual_tristate_follow),
+            stringResource(R.string.turned_on),
+            stringResource(R.string.turned_off),
+        )
+        ChipRows(
+            labels = labels,
+            selectedIndex = when (raw) {
+                "true" -> 1
+                "false" -> 2
+                else -> 0
+            },
+            onSelect = { onValueChange(when (it) { 1 -> "true"; 2 -> "false"; else -> "" }) },
+        )
+    }
 }
 
-private fun stepIcon(step: VisualStep, target: VisualTarget): ImageVector = when (step) {
-    is VisualStep.Group -> sectionIcon(step.section, target)
-    is VisualStep.Rule -> GkIcons.Rule
+@Composable
+private fun TriChip(
+    text: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val chipBg by animateColorAsState(
+        targetValue = if (selected) {
+            MaterialTheme.colorScheme.primaryContainer
+        } else {
+            Color.Transparent
+        },
+        animationSpec = tween(160),
+        label = "chipBg",
+    )
+    val chipFg by animateColorAsState(
+        targetValue = if (selected) {
+            MaterialTheme.colorScheme.onPrimaryContainer
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        },
+        animationSpec = tween(160),
+        label = "chipFg",
+    )
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(chipBg)
+            .border(
+                width = 1.dp,
+                color = if (selected) Color.Transparent else MaterialTheme.colorScheme.outlineVariant,
+                shape = RoundedCornerShape(8.dp),
+            )
+            .clickable(
+                interactionSource = null,
+                indication = ripple(),
+            ) { onClick() }
+            // 横向留出内边距：文字不贴边，标签过宽时也不会被挤成窄条。
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = text,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            color = chipFg,
+        )
+    }
 }
 
-/** 分区图标与 Tab 一致；作用范围按全局/应用目标区分。 */
+/** 枚举字段：整行下拉触发框，空值显示为「不设置」。 */
+@Composable
+private fun ChoiceField(
+    values: VisualValues,
+    key: String,
+    @StringRes description: Int?,
+    options: List<Pair<String, Int>>,
+    onValueChange: (String) -> Unit,
+    showLabel: Boolean = true,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val current = values[key]
+    val selectedLabel = options.firstOrNull { it.first == current }?.second
+    LabeledField(
+        label = key,
+        description = description,
+        required = false,
+        showLabel = showLabel,
+    ) {
+        Box {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                    .clickable(
+                        interactionSource = null,
+                        indication = ripple(),
+                    ) { expanded = true }
+                    .padding(horizontal = 12.dp, vertical = 18.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = selectedLabel?.let { stringResource(it) }
+                        ?: stringResource(R.string.rule_visual_unset),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (current.isBlank()) {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    } else {
+                        MaterialTheme.colorScheme.onSurface
+                    },
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.width(8.dp))
+                GkIcon(
+                    imageVector = GkIcons.UnfoldMore,
+                    modifier = Modifier.size(16.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    contentDescription = null,
+                )
+            }
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false },
+            ) {
+                options.forEach { (value, optionLabel) ->
+                    DropdownMenuItem(
+                        text = { Text(stringResource(optionLabel)) },
+                        trailingIcon = {
+                            if (value == current) {
+                                GkIcon(
+                                    imageVector = GkIcons.Check,
+                                    modifier = Modifier.size(16.dp),
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    contentDescription = null,
+                                )
+                            }
+                        },
+                        onClick = {
+                            expanded = false
+                            onValueChange(value)
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** 嵌套 data class 字段：按控件类型进入对应的折叠分组。 */
+@Composable
+private fun SelfGroup(
+    field: VisualField,
+    values: VisualValues,
+    onValueChange: (String, String) -> Unit,
+) {
+    when (field.control) {
+        VisualControl.Position -> PositionGroup(values, field.description, onValueChange)
+        VisualControl.SwipeArg -> SwipeGroup(values, field.description, onValueChange)
+        VisualControl.VersionCode -> VersionCodeGroup(values, field.description, onValueChange)
+        VisualControl.VersionName -> VersionNameGroup(values, field.description, onValueChange)
+        else -> Unit
+    }
+}
+
+/** `Position`：六个分量共用一个输入框，分段切换当前编辑的分量。 */
+@Composable
+private fun PositionGroup(
+    values: VisualValues,
+    @StringRes description: Int?,
+    onValueChange: (String, String) -> Unit,
+) {
+    var mode by remember { mutableStateOf(VisualSubFields.position.first()) }
+    val key = RuleVisualDraft.positionKey(mode)
+    CollapsibleGroup(GkIcons.CenterFocusWeak, R.string.rule_visual_section_position) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 6.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            ChipRows(
+                labels = VisualSubFields.position,
+                selectedIndex = VisualSubFields.position.indexOf(mode),
+                onSelect = { mode = VisualSubFields.position[it] },
+            )
+            if (description != null) {
+                Text(
+                    text = stringResource(description),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            EditorTextField(
+                value = values[key],
+                onValueChange = { onValueChange(key, it) },
+                singleLine = true,
+                monospace = true,
+            )
+        }
+    }
+}
+
+/** `SwipeArg`：起点/终点、六个分量与 `duration` 共用一个输入框。 */
+@Composable
+private fun SwipeGroup(
+    values: VisualValues,
+    @StringRes description: Int?,
+    onValueChange: (String, String) -> Unit,
+) {
+    // 选中的分量；null 表示正在编辑 duration。
+    var isStart by remember { mutableStateOf(true) }
+    var mode by remember { mutableStateOf<String?>(VisualSubFields.position.first()) }
+    val isDuration = mode == null
+    val key = when (val current = mode) {
+        null -> RuleVisualDraft.SwipeDuration
+        else ->
+            if (isStart) RuleVisualDraft.swipeStartKey(current) else RuleVisualDraft.swipeEndKey(current)
+    }
+    CollapsibleGroup(GkIcons.AutoMode, R.string.rule_visual_section_swipe) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 6.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            // 起点/终点、分量与 duration 排在同一片区域，组间用细竖线分隔。
+            ChipRows(
+                listOf(
+                    ChipGroup(
+                        labels = listOf("start", "end"),
+                        // 编辑 duration 时两级都不高亮，避免同时出现三个选中项。
+                        selectedIndex = when {
+                            isDuration -> -1
+                            isStart -> 0
+                            else -> 1
+                        },
+                        // 编辑 duration 时切回起终点，自动落到第一个分量。
+                        onSelect = {
+                            isStart = it == 0
+                            if (mode == null) mode = VisualSubFields.position.first()
+                        },
+                    ),
+                    ChipGroup(
+                        labels = VisualSubFields.position,
+                        // duration 为选中项时分量不高亮。
+                        selectedIndex = mode?.let { VisualSubFields.position.indexOf(it) } ?: -1,
+                        onSelect = { mode = VisualSubFields.position[it] },
+                    ),
+                    ChipGroup(
+                        labels = listOf(VisualSubFields.duration),
+                        selectedIndex = if (isDuration) 0 else -1,
+                        onSelect = { mode = null },
+                    ),
+                ),
+            )
+            if (description != null) {
+                Text(
+                    text = stringResource(description),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            EditorTextField(
+                value = values[key],
+                onValueChange = { onValueChange(key, it) },
+                singleLine = true,
+                monospace = !isDuration,
+                number = isDuration,
+            )
+        }
+    }
+}
+
+/** 合并输入框的一个分段：键名 + 该分段的输入形态。 */
+private data class MatcherMode(
+    val name: String,
+    val multiline: Boolean = false,
+    val number: Boolean = false,
+)
+
+/** 一组互斥标签及其选中项。 */
+private data class ChipGroup(
+    val labels: List<String>,
+    val selectedIndex: Int,
+    val onSelect: (Int) -> Unit,
+)
+
+/**
+ * 分段标签：用 [FlowRow] 自动换行，每个标签按自身内容取宽。
+ * 不做等分压缩，长字段名不会被截断；放不下时自然落到下一行。
+ */
+@Composable
+private fun ChipRows(
+    labels: List<String>,
+    selectedIndex: Int,
+    onSelect: (Int) -> Unit,
+) = ChipRows(listOf(ChipGroup(labels, selectedIndex, onSelect)))
+
+/**
+ * 多组互斥标签排在同一片区域内：组间以细竖线分隔，组内共用一次换行。
+ * 用于「起点/终点」这类前置切换与「分量」这类次级切换并列显示的场景。
+ */
+@Composable
+private fun ChipRows(groups: List<ChipGroup>) {
+    val all = groups.filter { it.labels.isNotEmpty() }
+    if (all.isEmpty()) return
+    FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+        itemVerticalAlignment = Alignment.CenterVertically,
+    ) {
+        all.forEachIndexed { groupIndex, group ->
+            if (groupIndex > 0) {
+                Box(
+                    modifier = Modifier
+                        .width(1.dp)
+                        .height(20.dp)
+                        .background(MaterialTheme.colorScheme.outlineVariant),
+                )
+            }
+            group.labels.forEachIndexed { index, label ->
+                TriChip(
+                    text = label,
+                    selected = group.selectedIndex == index,
+                    onClick = { group.onSelect(index) },
+                )
+            }
+        }
+    }
+}
+
+/**
+ * 嵌套匹配器：全部分量共用一个输入框，分段切换当前编辑的分量。
+ * `minimum`/`maximum` 等数字分量用单行数字键盘，`include`/`exclude` 等列表用多行。
+ */
+@Composable
+private fun MatcherGroup(
+    icon: ImageVector,
+    @StringRes title: Int,
+    values: VisualValues,
+    modes: List<MatcherMode>,
+    keyOf: (String) -> String,
+    @StringRes description: Int?,
+    onValueChange: (String, String) -> Unit,
+) {
+    var mode by remember { mutableStateOf(modes.first()) }
+    val key = keyOf(mode.name)
+    CollapsibleGroup(icon, title) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 6.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            ChipRows(
+                labels = modes.map { it.name },
+                selectedIndex = modes.indexOf(mode),
+                onSelect = { mode = modes[it] },
+            )
+            // 标题已说明整组含义时不再重复同一句说明。
+            if (description != null && description != title) {
+                Text(
+                    text = stringResource(description),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            EditorTextField(
+                value = values[key],
+                onValueChange = { onValueChange(key, it) },
+                singleLine = !mode.multiline,
+                monospace = !mode.number,
+                number = mode.number,
+            )
+        }
+    }
+}
+
+/** `IntegerMatcher`：minimum / maximum / include / exclude。 */
+@Composable
+private fun VersionCodeGroup(
+    values: VisualValues,
+    @StringRes description: Int?,
+    onValueChange: (String, String) -> Unit,
+) {
+    MatcherGroup(
+        icon = GkIcons.Layers,
+        title = R.string.rule_help_p_version_code,
+        values = values,
+        modes = versionCodeModes,
+        keyOf = RuleVisualDraft::versionCodeKey,
+        description = description,
+        onValueChange = onValueChange,
+    )
+}
+
+/** `StringMatcher`：pattern / include / exclude。 */
+@Composable
+private fun VersionNameGroup(
+    values: VisualValues,
+    @StringRes description: Int?,
+    onValueChange: (String, String) -> Unit,
+) {
+    MatcherGroup(
+        icon = GkIcons.TextFields,
+        title = R.string.rule_help_p_version_name,
+        values = values,
+        modes = versionNameModes,
+        keyOf = RuleVisualDraft::versionNameKey,
+        description = description,
+        onValueChange = onValueChange,
+    )
+}
+
+private val versionCodeModes = listOf(
+    MatcherMode("minimum", number = true),
+    MatcherMode("maximum", number = true),
+    MatcherMode("include", multiline = true),
+    MatcherMode("exclude", multiline = true),
+)
+
+private val versionNameModes = listOf(
+    MatcherMode("pattern"),
+    MatcherMode("include", multiline = true),
+    MatcherMode("exclude", multiline = true),
+)
+
+/**
+ * 扁平可折叠分组：标题行可点击，默认收起，箭头随状态旋转；
+ * 展开后内容缩进并带左侧强调线。
+ */
+@Composable
+private fun CollapsibleGroup(
+    icon: ImageVector,
+    @StringRes title: Int,
+    initiallyExpanded: Boolean = false,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    var expanded by remember(initiallyExpanded) { mutableStateOf(initiallyExpanded) }
+    val chevronRotation by animateFloatAsState(
+        targetValue = if (expanded) 180f else 0f,
+        animationSpec = tween(200),
+        label = "chevron",
+    )
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(8.dp))
+                .clickable(
+                    interactionSource = null,
+                    indication = ripple(),
+                ) { expanded = !expanded }
+                .padding(vertical = 9.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            GkIcon(
+                imageVector = icon,
+                modifier = Modifier.size(16.dp),
+                tint = MaterialTheme.colorScheme.tertiary,
+                contentDescription = null,
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = stringResource(title),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            GkIcon(
+                imageVector = GkIcons.ExpandMore,
+                modifier = Modifier.size(18.dp).rotate(chevronRotation),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                contentDescription = null,
+            )
+        }
+        AnimatedVisibility(
+            visible = expanded,
+            enter = expandVertically(tween(200)) + fadeIn(tween(150)),
+            exit = shrinkVertically(tween(200)) + fadeOut(tween(120)),
+        ) {
+            Row(modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
+                Box(
+                    modifier = Modifier
+                        .width(3.dp)
+                        .fillMaxHeight()
+                        .clip(RoundedCornerShape(1.5.dp))
+                        .background(MaterialTheme.colorScheme.tertiary),
+                )
+                Spacer(Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    content()
+                }
+            }
+        }
+    }
+}
+
+/** 分区图标；作用范围按全局/应用目标区分。 */
 private fun sectionIcon(section: VisualSection, target: VisualTarget): ImageVector = when (section) {
     VisualSection.Identity -> GkIcons.Title
     VisualSection.Target ->
@@ -289,574 +1696,34 @@ private fun sectionTitle(section: VisualSection, target: VisualTarget): Int =
         VisualSection.Rules -> R.string.rule_visual_section_rule
     }
 
-/** 规则组某一分区：字段与顺序完全来自 schema。 */
-@Composable
-private fun GroupPage(
-    draft: VisualRuleGroupDraft,
-    target: VisualTarget,
-    section: VisualSection,
-    onValueChange: (String, String) -> Unit,
-) {
-    val fields = groupFieldsFor(target).filter { it.section == section }
-    VisualSection(
-        title = sectionTitle(section, target),
-        icon = sectionIcon(section, target),
-        section = section,
-    ) {
-        if (section == VisualSection.Identity && target == VisualTarget.NewApp) {
-            // 新建应用时先填应用 id，它属于顶层的 RawApp 而不是规则组。
-            VisualText(
-                values = draft.values,
-                key = RuleVisualDraft.AppId,
-                label = RuleVisualDraft.AppId,
-                description = R.string.rule_help_p_apps,
-                required = true,
-                placeholder = R.string.rule_visual_app_id_hint,
-                onValueChange = { onValueChange(RuleVisualDraft.AppId, it) },
-            )
-        }
-        RenderFieldGroups(fields = fields) { field ->
-            FieldEditor(draft.values, field, onValueChange)
-        }
-    }
+private fun sectionDescription(section: VisualSection, target: VisualTarget): Int = when (section) {
+    VisualSection.Identity -> R.string.rule_visual_desc_identity
+    VisualSection.Target ->
+        if (target == VisualTarget.GlobalGroup) R.string.rule_visual_desc_target_global
+        else R.string.rule_visual_desc_target_app
+
+    VisualSection.Timing -> R.string.rule_visual_desc_timing
+    VisualSection.Links -> R.string.rule_visual_desc_links
+    VisualSection.Rules -> R.string.rule_visual_desc_rule
 }
 
-/** 一条规则一页，字段与顺序同样来自 schema。 */
-@Composable
-private fun RulePage(
-    draft: VisualRuleGroupDraft,
-    position: Int,
-    target: VisualTarget,
-    onDraftChange: (VisualRuleGroupDraft) -> Unit,
-    onAddRule: () -> Unit,
-    onRemoveRule: () -> Unit,
-) {
-    val rule = draft.rules.getOrNull(position) ?: return
-    val setValue: (String, String) -> Unit = { key, value ->
-        onDraftChange(
-            draft.copy(
-                rules = draft.rules.map { item ->
-                    if (item.index == rule.index) {
-                        item.copy(values = item.values.with(key, value))
-                    } else {
-                        item
-                    }
-                },
-            )
-        )
-    }
-    VisualSection(
-        title = R.string.rule_visual_section_rule,
-        icon = GkIcons.Rule,
-        section = VisualSection.Rules,
-    ) {
-        if (draft.rules.size > 1) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-            ) {
-                GkIconButton(
-                    imageVector = GkIcons.Delete,
-                    contentDescription = stringResource(R.string.rule_visual_remove_rule),
-                    onClick = onRemoveRule,
-                )
-            }
-        }
-        var overrideHintShown = false
-        val fields = ruleFieldsFor(target)
-        RenderFieldGroups(fields = fields) { field ->
-            if (field.overridesGroup && !overrideHintShown) {
-                overrideHintShown = true
-                Text(
-                    text = stringResource(R.string.rule_visual_inherit_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            FieldEditor(rule.values, field, setValue)
-        }
-        FilledTonalButton(
-            onClick = onAddRule,
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp),
-        ) {
-            GkIcon(imageVector = GkIcons.Add, contentDescription = null)
-            Spacer(Modifier.width(6.dp))
-            Text(stringResource(R.string.rule_visual_add_rule))
-        }
-    }
+/** 子分组图标。 */
+private fun subGroupIcon(subGroup: VisualSubGroup): ImageVector = when (subGroup) {
+    VisualSubGroup.ActionTiming -> GkIcons.Schedule
+    VisualSubGroup.AppScope -> GkIcons.Apps
+    VisualSubGroup.RefLinks -> GkIcons.Link
 }
 
-/**
- * 按 schema 的子分组拆分渲染：未归组的字段平铺在前，
- * 其余字段按 [VisualSubGroup] 收进默认折叠的手风琴。
- */
+/** 目标类型标签。 */
 @Composable
-private fun RenderFieldGroups(
-    fields: List<VisualField>,
-    fieldContent: @Composable (VisualField) -> Unit,
-) {
-    val grouping = remember(fields) { fields.groupBySubGroup() }
-    grouping.plain.forEach { field -> fieldContent(field) }
-    grouping.grouped.forEach { (subGroup, groupFields) ->
-        VisualSubSection(title = subGroup.title) {
-            groupFields.forEach { field -> fieldContent(field) }
-        }
-    }
-}
-
-/** 按字段的控件类型渲染；类型来自 data class 的声明。 */
-@Composable
-private fun FieldEditor(
-    values: VisualValues,
-    field: VisualField,
-    onValueChange: (String, String) -> Unit,
-) {
-    val set: (String) -> Unit = { onValueChange(field.name, it) }
-    when (field.control) {
-        VisualControl.Bool -> VisualSwitch(values, field.name, field.description, set)
-        VisualControl.Int, VisualControl.Long ->
-            VisualNumber(values, field.name, field.description, set)
-
-        VisualControl.Text -> VisualText(values, field.name, field.description, set)
-        VisualControl.Action ->
-            VisualChoice(values, field.name, field.description, actionOptions, set)
-
-        VisualControl.ResetMatch ->
-            VisualChoice(values, field.name, field.description, resetMatchOptions, set)
-
-        VisualControl.TextList, VisualControl.IntList, VisualControl.Apps ->
-            VisualLines(
-                values = values,
-                key = field.name,
-                description = field.description,
-                onValueChange = set,
-                required = field.required,
-            )
-
-        VisualControl.Position -> PositionEditor(values, field.description, onValueChange)
-        VisualControl.SwipeArg -> SwipeEditor(values, field.description, onValueChange)
-        VisualControl.VersionCode -> VersionCodeEditor(values, field.description, onValueChange)
-        VisualControl.VersionName -> VersionNameEditor(values, field.description, onValueChange)
-        // 规则列表由规则页承载，不走字段编辑器。
-        VisualControl.Rules -> Unit
-    }
-}
-
-/** `Position`：六个子字段，与 data class 一致。 */
-@Composable
-private fun PositionEditor(
-    values: VisualValues,
-    description: Int,
-    onValueChange: (String, String) -> Unit,
-) {
-    VisualSubSection(R.string.rule_visual_section_position) {
-        VisualSubFields.position.forEach { name ->
-            val key = RuleVisualDraft.positionKey(name)
-            VisualText(values, key, description, onValueChange = { onValueChange(key, it) }, label = name)
-        }
-    }
-}
-
-/** `SwipeArg`：start/end 各六个子字段，加 duration。 */
-@Composable
-private fun SwipeEditor(
-    values: VisualValues,
-    description: Int,
-    onValueChange: (String, String) -> Unit,
-) {
-    VisualSubSection(R.string.rule_visual_section_swipe) {
-        VisualSubFields.position.forEach { name ->
-            val key = RuleVisualDraft.swipeStartKey(name)
-            VisualText(
-                values = values,
-                key = key,
-                description = description,
-                label = "start.$name",
-                onValueChange = { onValueChange(key, it) },
-            )
-        }
-        VisualSubFields.position.forEach { name ->
-            val key = RuleVisualDraft.swipeEndKey(name)
-            VisualText(
-                values = values,
-                key = key,
-                description = description,
-                label = "end.$name",
-                onValueChange = { onValueChange(key, it) },
-            )
-        }
-        val durationKey = RuleVisualDraft.SwipeDuration
-        VisualNumber(
-            values = values,
-            key = durationKey,
-            description = R.string.rule_help_p_swipe_arg,
-            onValueChange = { onValueChange(durationKey, it) },
-            label = VisualSubFields.duration,
-        )
-    }
-}
-
-/** `IntegerMatcher`：minimum / maximum / include / exclude。 */
-@Composable
-private fun VersionCodeEditor(
-    values: VisualValues,
-    description: Int,
-    onValueChange: (String, String) -> Unit,
-) {
-    VisualSubSection(R.string.rule_help_p_version_code) {
-        VisualSubFields.versionCode.forEach { name ->
-            val key = RuleVisualDraft.versionCodeKey(name)
-            if (name == "include" || name == "exclude") {
-                VisualLines(
-                    values = values,
-                    key = key,
-                    description = description,
-                    onValueChange = { onValueChange(key, it) },
-                    label = name,
-                )
-            } else {
-                VisualNumber(
-                    values = values,
-                    key = key,
-                    description = description,
-                    onValueChange = { onValueChange(key, it) },
-                    label = name,
-                )
-            }
-        }
-    }
-}
-
-/** `StringMatcher`：pattern / include / exclude。 */
-@Composable
-private fun VersionNameEditor(
-    values: VisualValues,
-    description: Int,
-    onValueChange: (String, String) -> Unit,
-) {
-    VisualSubSection(R.string.rule_help_p_version_name) {
-        VisualSubFields.versionName.forEach { name ->
-            val key = RuleVisualDraft.versionNameKey(name)
-            if (name == "pattern") {
-                VisualText(
-                    values = values,
-                    key = key,
-                    description = description,
-                    onValueChange = { onValueChange(key, it) },
-                    label = name,
-                )
-            } else {
-                VisualLines(
-                    values = values,
-                    key = key,
-                    description = description,
-                    onValueChange = { onValueChange(key, it) },
-                    label = name,
-                )
-            }
-        }
-    }
-}
-
-/**
- * 分区容器：无底色，字段直接平铺在页面上；标题由顶部 Tab 承载。
- */
-@Composable
-private fun VisualSection(
-    title: Int,
-    icon: ImageVector,
-    section: VisualSection,
-    content: @Composable ColumnScope.() -> Unit,
-) {
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        content()
-    }
-}
-
-/** 嵌套 data class 的子字段区：圆角卡片包裹的手风琴，默认收起。 */
-@Composable
-private fun VisualSubSection(
-    title: Int,
-    content: @Composable ColumnScope.() -> Unit,
-) {
-    var expanded by remember { mutableStateOf(false) }
-    GkExpandableSection(
-        expanded = expanded,
-        onToggle = { expanded = !expanded },
-        header = { indicator ->
-            Row(
-                modifier = Modifier.fillMaxWidth()
-                    .padding(start = 14.dp, end = 6.dp, top = 10.dp, bottom = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = stringResource(title),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = if (expanded) MaterialTheme.colorScheme.tertiary
-                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.weight(1f),
-                )
-                indicator()
-            }
-        },
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh),
-    ) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(
-                start = 14.dp, end = 14.dp, bottom = 14.dp,
-            ),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            content()
-        }
-    }
+private fun targetLabel(target: VisualTarget): String = when (target) {
+    VisualTarget.GlobalGroup -> stringResource(R.string.global_rules)
+    VisualTarget.AppGroup -> stringResource(R.string.app_rules)
+    VisualTarget.NewApp -> stringResource(R.string.rule_visual_target_new_app)
 }
 
 /** 字段名按 JSON 属性名显示；规则级的 "rule." 前缀只用于表单区分，不显示。 */
 private fun fieldLabel(key: String) = key.removePrefix("rule.")
-
-/**
- * 文本框：大圆角填充式容器，无任何装饰——无描边、无指示条，仅靠容器色区分。
- */
-@Composable
-private fun expressiveFieldShape(): Shape = RoundedCornerShape(24.dp)
-
-@Composable
-private fun expressiveFieldColors() = TextFieldDefaults.colors(
-    focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-    disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-    errorContainerColor = MaterialTheme.colorScheme.errorContainer,
-    focusedIndicatorColor = Color.Transparent,
-    unfocusedIndicatorColor = Color.Transparent,
-    disabledIndicatorColor = Color.Transparent,
-    errorIndicatorColor = Color.Transparent,
-    focusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-    unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-    cursorColor = MaterialTheme.colorScheme.tertiary,
-)
-
-@Composable
-private fun VisualText(
-    values: VisualValues,
-    key: String,
-    description: Int?,
-    onValueChange: (String) -> Unit,
-    label: String = fieldLabel(key),
-    required: Boolean = false,
-    placeholder: Int? = null,
-) {
-    TextField(
-        value = values[key],
-        onValueChange = onValueChange,
-        modifier = Modifier.fillMaxWidth(),
-        singleLine = true,
-        shape = expressiveFieldShape(),
-        colors = expressiveFieldColors(),
-        label = { VisualLabel(label, required) },
-        placeholder = placeholder?.let { { Text(stringResource(it)) } },
-        supportingText = description?.let { { Text(stringResource(it)) } },
-    )
-}
-
-@Composable
-private fun VisualLines(
-    values: VisualValues,
-    key: String,
-    description: Int?,
-    onValueChange: (String) -> Unit,
-    label: String = fieldLabel(key),
-    required: Boolean = false,
-) {
-    TextField(
-        value = values[key],
-        onValueChange = onValueChange,
-        modifier = Modifier.fillMaxWidth(),
-        // 默认只占一行高度，输入换行后自然增高。
-        minLines = 1,
-        maxLines = 6,
-        singleLine = false,
-        shape = expressiveFieldShape(),
-        colors = expressiveFieldColors(),
-        label = { VisualLabel(label, required) },
-        supportingText = description?.let { { Text(stringResource(it)) } },
-    )
-}
-
-@Composable
-private fun VisualNumber(
-    values: VisualValues,
-    key: String,
-    description: Int?,
-    onValueChange: (String) -> Unit,
-    label: String = fieldLabel(key),
-) {
-    TextField(
-        value = values[key],
-        onValueChange = { input -> onValueChange(input.filter { it.isDigit() || it == '-' }) },
-        modifier = Modifier.fillMaxWidth(),
-        singleLine = true,
-        shape = expressiveFieldShape(),
-        colors = expressiveFieldColors(),
-        label = { VisualLabel(label, false) },
-        supportingText = description?.let { { Text(stringResource(it)) } },
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-    )
-}
-
-/**
- * 布尔字段用三态复选框：不确定 = 未设置（不写入该字段，跟随默认值），
- * 选中 = `true`，未选中 = `false`。点击按 未设置 → true → false → 未设置 循环。
- */
-@Composable
-private fun VisualSwitch(
-    values: VisualValues,
-    key: String,
-    description: Int?,
-    onValueChange: (String) -> Unit,
-    label: String = fieldLabel(key),
-) {
-    val raw = values[key]
-    val state = when (raw) {
-        "true" -> ToggleableState.On
-        "false" -> ToggleableState.Off
-        else -> ToggleableState.Indeterminate
-    }
-    val stateText = when (raw) {
-        "true" -> stringResource(R.string.turned_on)
-        "false" -> stringResource(R.string.turned_off)
-        else -> stringResource(R.string.rule_visual_unset)
-    }
-    val next = when (raw) {
-        "" -> "true"
-        "true" -> "false"
-        else -> ""
-    }
-    Row(
-        modifier = Modifier.fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(MaterialTheme.colorScheme.surface)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            VisualLabel(label, false)
-            Text(
-                text = description?.let { stringResource(it) + " · " + stateText } ?: stateText,
-                style = MaterialTheme.typography.bodySmall,
-                color = when (raw) {
-                    "true" -> MaterialTheme.colorScheme.tertiary
-                    "false" -> MaterialTheme.colorScheme.error
-                    else -> MaterialTheme.colorScheme.onSurfaceVariant
-                },
-            )
-        }
-        TriStateCheckbox(
-            state = state,
-            onClick = { onValueChange(next) },
-            modifier = Modifier.semantics { contentDescription = stateText },
-            colors = CheckboxDefaults.colors(
-                checkedColor = MaterialTheme.colorScheme.tertiary,
-                uncheckedColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                checkmarkColor = MaterialTheme.colorScheme.onPrimary,
-            ),
-        )
-    }
-}
-
-/** 枚举字段用下拉；空值显示为「不设置」。触发框与输入框同为描边样式。 */
-@Composable
-private fun VisualChoice(
-    values: VisualValues,
-    key: String,
-    description: Int?,
-    options: List<Pair<String, Int>>,
-    onValueChange: (String) -> Unit,
-    label: String = fieldLabel(key),
-) {
-    var expanded by remember { mutableStateOf(false) }
-    val selectedLabel = options.firstOrNull { it.first == values[key] }?.second
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        VisualLabel(label, false)
-        if (description != null) {
-            Text(
-                text = stringResource(description),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        Box {
-            Surface(
-                onClick = { expanded = true },
-                modifier = Modifier.fillMaxWidth(),
-                shape = expressiveFieldShape(),
-                color = MaterialTheme.colorScheme.surfaceContainerHighest,
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Text(
-                        text = selectedLabel?.let { stringResource(it) }
-                            ?: stringResource(R.string.rule_visual_unset),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = if (values[key].isNullOrEmpty()) {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        } else {
-                            MaterialTheme.colorScheme.onSurface
-                        },
-                    )
-                    GkIcon(
-                        imageVector = GkIcons.UnfoldMore,
-                        modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.tertiary,
-                        contentDescription = null,
-                    )
-                }
-            }
-            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                options.forEach { (value, optionLabel) ->
-                    DropdownMenuItem(
-                        text = { Text(stringResource(optionLabel)) },
-                        onClick = {
-                            expanded = false
-                            onValueChange(value)
-                        },
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun VisualLabel(label: String, required: Boolean) {
-    Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
-        )
-        if (required) {
-            Text(
-                text = "*",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.error,
-            )
-        }
-    }
-}
 
 private val actionOptions: List<Pair<String, Int>> by lazy {
     RuleVisualAction.entries.map { it.value to it.labelResource }

@@ -145,7 +145,11 @@ object RuleVisualDraft {
         val values = draft.values
         if (values.text("name") == null) return null
         if (target == VisualTarget.NewApp && values.text(AppId) == null) return null
-        val rules = draft.rules.filter { it.values.lines("matches").isNotEmpty() }
+        // 只要填过任意字段就纳入预览：新增的规则还没写选择器，
+        // 若按 matches 过滤会整条消失，看不到刚添加的内容。
+        val rules = draft.rules.filter { rule ->
+            rule.values.entries.any { (_, value) -> value.isNotBlank() }
+        }
         if (rules.isEmpty()) return null
         val group = groupJson(values, rules, target)
         val root = if (target == VisualTarget.NewApp) {

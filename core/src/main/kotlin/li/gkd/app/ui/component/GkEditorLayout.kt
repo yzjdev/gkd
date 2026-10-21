@@ -18,6 +18,7 @@ fun GkEditorLayout(
     title: @Composable () -> Unit, saveEnabled: Boolean,
     onClose: () -> Unit, onSave: () -> Unit,
     menuActions: (@Composable RowScope.() -> Unit)? = null,
+    navigationIcon: (@Composable () -> Unit)? = null,
     content: @Composable (PaddingValues) -> Unit,
 ) {
     GkScaffold(
@@ -27,11 +28,15 @@ fun GkEditorLayout(
             GkTopAppBar(
                 title = title,
                 navigationIcon = {
-                    GkIconButton(
-                        GkIcons.Close,
-                        contentDescription = stringResource(R.string.dialog_close),
-                        onClick = onClose
-                    )
+                    if (navigationIcon != null) {
+                        navigationIcon()
+                    } else {
+                        GkIconButton(
+                            GkIcons.Close,
+                            contentDescription = stringResource(R.string.dialog_close),
+                            onClick = onClose
+                        )
+                    }
                 },
                 actions = {
                     if (menuActions != null) menuActions()

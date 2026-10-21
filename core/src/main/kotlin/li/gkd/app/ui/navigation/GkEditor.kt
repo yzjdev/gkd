@@ -26,6 +26,8 @@ fun GkEditor(
     val dialog by actions.dialog.collectAsStateWithLifecycle()
     val close: () -> Unit = { if (navigator.topEntry === entry) navigator.pop() }
     val requestClose: () -> Unit = { actions.requestClose(editor.hasChanges, { hideIme() }, close) }
+    // 页面有内部层级时先回退一层，退无可退才走关闭流程。
+    val onBack: () -> Unit = { if (!editor.onBack()) requestClose() }
     val save: () -> Unit = {
         actions.save(editor.onSave, { hideIme() }) {
             if (navigator.topEntry === entry) {
@@ -33,13 +35,14 @@ fun GkEditor(
             }
         }
     }
-    GkBackHandler(onBack = requestClose)
+    GkBackHandler(onBack = onBack)
     GkEditorLayout(
         title = editor.titleContent,
         saveEnabled = editor.saveEnabled,
         onClose = requestClose,
         onSave = save,
         menuActions = editor.menuActions,
+        navigationIcon = editor.navigationIcon,
         content = content,
     )
     GkEditorDialogs(dialog, actions::dismissDialog, close)

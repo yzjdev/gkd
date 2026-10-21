@@ -80,16 +80,63 @@ fun UpsertRuleGroupPage(
         val text = draft ?: data.initialText
         val visualText = visualDraft?.let { RuleVisualDraft.toJson5(it, visualTarget) }
         val saveText = if (blankPage) visualText else text
+        // 可视化改动实时写回 JSON 文本草稿作为预览，切换编辑方式或查看内容都是最新的；
+        // 真正落盘仍只由顶栏保存触发。仅在可视化页同步，避免覆盖用户手改的文本。
+        LaunchedEffect(visualText, blankPage) {
+            if (blankPage && visualText != null) {
+                vm.setDraft(visualText)
+            }
+        }
         val inputInsets: Modifier = inputInsets()
+        val visualDraftValue = visualDraft ?: VisualRuleGroupDraft()
+        // 可视化编辑的聚焦层级由页面持有：顶栏据此切换标题与返回按钮。
+        var visualEditing by remember { mutableStateOf<VisualEditorTarget?>(null) }
+        val activeEditing = if (blankPage) {
+            when (val current = visualEditing) {
+                is VisualEditorTarget.Rule ->
+                    if (visualDraftValue.rules.any { it.index == current.index }) current else null
+
+                else -> current
+            }
+        } else {
+            null
+        }
+        val editorTitle = when (val current = activeEditing) {
+            null -> stringResource(if (vm.isEdit) R.string.rule_edit else R.string.rule_add)
+            VisualEditorTarget.GroupSettings -> stringResource(R.string.rule_visual_tab_settings)
+            is VisualEditorTarget.Rule -> {
+                val position = visualDraftValue.rules.indexOfFirst { it.index == current.index }
+                stringResource(R.string.rule_visual_rule_index, position + 1)
+            }
+        }
+        val backIcon: (@Composable () -> Unit)? = if (activeEditing != null) {
+            {
+                GkIconButton(
+                    imageVector = GkIcons.ArrowBack,
+                    contentDescription = stringResource(R.string.action_back),
+                    onClick = { visualEditing = null },
+                )
+            }
+        } else {
+            null
+        }
 
         GkEditor(
             EditorSession(
-                title =
-                    stringResource(if (vm.isEdit) R.string.rule_edit else R.string.rule_add),
+                title = editorTitle,
                 hasChanges = { saveText != null && vm.hasTextChanged(saveText) },
                 saveEnabled = !saveText.isNullOrBlank() &&
                         (vm.isEdit || saveText != data.initialText),
                 onSave = { saveText?.let { vm.saveRule(it) } },
+                navigationIcon = backIcon,
+                // 处于详情层级时，返回键先退回总览，而不是直接关闭整页。
+                onBack = {
+                    val consumed = blankPage && activeEditing != null
+                    if (consumed) {
+                        visualEditing = null
+                    }
+                    consumed
+                },
                 menuActions = {
                     GkIconButton(
                         // 图标表示点击后会切换到的编辑方式：代码 = JSON 文本，列表 = 可视化。
@@ -126,11 +173,13 @@ fun UpsertRuleGroupPage(
         ) { paddingValues ->
             if (blankPage) {
                 RuleVisualEditor(
-                    draft = visualDraft ?: VisualRuleGroupDraft(),
+                    draft = visualDraftValue,
                     target = visualTarget,
                     onDraftChange = vm::setVisualDraft,
+                    editing = activeEditing,
+                    onEditingChange = { visualEditing = it },
                     modifier = Modifier.scaffoldPadding(paddingValues).fillMaxSize(),
-                    // 只让正文避让输入法，顶部 Tab 保持不动。
+                    // 只让正文避让输入法，顶栏保持不动。
                     contentInsets = inputInsets,
                 )
                 return@GkEditor
