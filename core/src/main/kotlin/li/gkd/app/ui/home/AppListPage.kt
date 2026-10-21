@@ -138,7 +138,7 @@ fun appListPage(
     }
 
     val scope = rememberCoroutineScope()
-    // 长按弹出的联网菜单目标；开关状态以持久化禁网列表为唯一来源。
+    // 长按弹出的联网菜单目标；开关以持久化禁网列表为状态来源，打开菜单时用实际状态校准。
     var networkTarget by remember { mutableStateOf<AppInfo?>(null) }
     fun requestNetworkMenu(appInfo: AppInfo) {
         if (!appNetworkControlSupported) {
@@ -154,6 +154,14 @@ fun appListPage(
             if (enabled == null) {
                 ToastUtils.show(R.string.app_network_privilege_required.getSync(), forced = true)
                 return@launch
+            }
+            // 禁网规则在重启或拒绝链被关闭后会静默失效，实际状态可能与缓存不一致；
+            // 以服务回报的实际状态为准回写，开关才不会停留在失效前的旧状态。
+            val blocked = !enabled
+            if (blocked != (appInfo.id in SettingsRepository.networkDisabledAppList.value)) {
+                SettingsRepository.updateNetworkDisabledAppList { ids ->
+                    if (blocked) ids + appInfo.id else ids - appInfo.id
+                }
             }
             networkTarget = appInfo
         }
