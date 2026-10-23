@@ -306,10 +306,15 @@ abstract class OverlayWindowService(
         var longClickJob: Job? = null
         var viewClickEnabled = false
         var isDragging = false
+        var longClickFired = false
+        // 只有真正拖动过才需要写回位置，避免每次点击都触发一次设置文件落盘。
+        var positionChanged = false
         val touchSlop = ViewConfiguration.get(this).scaledTouchSlop
+        // 点击判定上限必须与长按时长一致：低于长按时长的手势都算点击。
+        // 用 getTapTimeout()(100ms) 会把正常按压(100~200ms)整段丢弃，表现为“点好几次才生效”。
+        val longPressMillis = ViewConfiguration.getLongPressTimeout()
         @SuppressLint("ClickableViewAccessibility")
         view.setOnTouchListener { _, event ->
-            if (fixMoveFlag > 0) return@setOnTouchListener true
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
                     downXy = event.rawX to event.rawY
@@ -318,9 +323,13 @@ abstract class OverlayWindowService(
                     paramsXy = layoutParams.x to layoutParams.y
                     viewClickEnabled = isViewClickEnabled()
                     isDragging = false
+                    longClickFired = false
+                    positionChanged = false
                     longClickJob = null
                     longClickJob = lifecycleScope.launch {
-                        delay(500.milliseconds)
+                        delay(longPressMillis.toLong())
+                        // 长按已触发：抬起时不应再判为点击。
+                        longClickFired = true
                         longClickJob = null
                         if (downXy != null) {
                             onLongClickView()
@@ -336,6 +345,13 @@ abstract class OverlayWindowService(
                         if (abs(dx) > touchSlop || abs(dy) > touchSlop) {
                             isDragging = true
                         }
+                        if (isDragging) {
+                            longClickJob?.cancel()
+                            longClickJob = null
+                        }
+                        // 位置修正动画期间不接受拖动，避免与动画争抢 layoutParams；
+                        // 但"是否拖动"必须在上面先判定，否则动画期间的手势会被当成点击。
+                        if (fixMoveFlag > 0) return@setOnTouchListener true
                         val x = dx + paramsXy.first
                         val y = dy + paramsXy.second
                         layoutParams.x = x.coerceIn(marginX, screenWidth - view.width - marginX)
@@ -345,18 +361,16 @@ abstract class OverlayWindowService(
                         )
                         positionFlow.value = listOf(layoutParams.x, layoutParams.y)
                         windowManager.updateViewLayout(view, layoutParams)
-                        if (isDragging) {
-                            longClickJob?.cancel()
-                            longClickJob = null
-                        }
+                        positionChanged = isDragging
                     }
                     true
                 }
 
                 MotionEvent.ACTION_UP -> {
-                    savePosition()
-                    val gapTime = event.eventTime - event.downTime
-                    if (viewClickEnabled && !isDragging && gapTime <= ViewConfiguration.getTapTimeout()) {
+                    if (positionChanged) savePosition()
+                    // 长按已消费手势时不判点击；其余只要没拖动就算点击。
+                    // 不再用时间窗过滤：长按计时已覆盖“按住太久”的情况。
+                    if (viewClickEnabled && !isDragging && !longClickFired) {
                         onClickView()
                     }
                     downXy = null
@@ -366,7 +380,7 @@ abstract class OverlayWindowService(
                 }
 
                 MotionEvent.ACTION_CANCEL -> {
-                    savePosition()
+                    if (positionChanged) savePosition()
                     downXy = null
                     longClickJob?.cancel()
                     longClickJob = null
