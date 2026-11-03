@@ -1,7 +1,4 @@
-import li.gkd.gradle.CollectConsumerProguardRulesTask
 import li.gkd.gradle.ValidateStringResourcesTask
-import li.gkd.gradle.buildProperty
-import li.gkd.gradle.gitInfo
 
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
@@ -29,33 +26,12 @@ tasks
         dependsOn(validateStringResources)
     }
 
-val generateDesktopAppMeta =
-    tasks.register<WriteProperties>("generateDesktopAppMeta") {
-        destinationFile.set(
-            layout.buildDirectory.file("generated/desktopAppMeta/app-meta.properties"),
-        )
-        property("versionCode", rootProject.extra["gkdVersionCode"] as Int)
-        property("versionName", rootProject.extra["gkdVersionName"] as String)
-        property("commitId", project.gitInfo.commitId)
-        property("commitTime", project.gitInfo.commitTime)
-        property("tagName", project.gitInfo.tagName.orEmpty())
-    }
-
 kotlin {
     android {
         namespace = "li.gkd.app"
         androidResources.enable = true
-        withHostTest {
-            isIncludeAndroidResources = true
-        }
     }
-    jvm()
     sourceSets {
-        jvmMain {
-            resources.srcDir(
-                generateDesktopAppMeta.map { it.destinationFile.get().asFile.parentFile },
-            )
-        }
         commonMain.dependencies {
             compileOnly(libs.codeorigin)
             api(libs.cmp.resources)
@@ -116,116 +92,9 @@ kotlin {
             api(libs.compose.ui)
             api(libs.compose.ui.graphics)
         }
-        jvmMain.dependencies {
-            api(libs.jna)
-            api(libs.jna.platform)
-            api(libs.webview2.compose)
-            api(compose.desktop.currentOs)
-            api(libs.kotlinx.coroutines.swing)
-        }
-        commonTest.dependencies {
-            implementation(libs.kotlin.test)
-            implementation(libs.kotlinx.coroutines.test)
-        }
-        named("androidHostTest") {
-            dependencies {
-                implementation(libs.junit)
-                implementation(libs.robolectric.get().toString()) {
-                    exclude(group = "org.robolectric", module = "nativeruntime-dist-compat")
-                }
-            }
-        }
-        jvmTest.dependencies {
-            implementation(libs.exp4j) // Differential compatibility oracle; absent from production.
-            implementation(libs.androidx.sqlite.bundled)
-        }
     }
 }
 
 dependencies {
     remapApi(project(":gkd-hidden-api"))
-}
-
-val jvmRegressionTests = tasks.named<Test>("jvmTest")
-
-tasks.register<Test>("matchingRegression") {
-    group = "verification"
-    description = "Runs matching scenarios and existing engine regressions on the JVM."
-    testClassesDirs = jvmRegressionTests.get().testClassesDirs
-    classpath = jvmRegressionTests.get().classpath
-    filter { includeTestsMatching("li.gkd.app.matching.*") }
-    testLogging { events("failed", "skipped") }
-}
-
-val collectDesktopConsumerRules =
-    tasks.register<CollectConsumerProguardRulesTask>("collectDesktopConsumerRules") {
-        group = "compose desktop"
-        description = "Collects META-INF/proguard/*.pro from JVM runtime dependencies."
-        runtimeJars.from(
-            configurations.named("jvmRuntimeClasspath").map { classpath ->
-                classpath.filter { it.extension.equals("jar", ignoreCase = true) }
-            },
-        )
-        rulesFile.set(layout.buildDirectory.file("generated/proguard/desktop-consumer-rules.pro"))
-    }
-
-compose.desktop.application {
-    mainClass = "li.gkd.app.DesktopMainKt"
-    nativeDistributions {
-        packageName = "GKD"
-        packageVersion = (rootProject.extra["gkdVersionName"] as String).substringBefore('-')
-        description = "GKD Desktop Host"
-        windows {
-            iconFile.set(project.file("src/jvmMain/resources/gkd.ico"))
-        }
-        // suggestModules plus dynamic JDBC/naming providers used by runtime dependencies.
-        modules(
-            "java.instrument",
-            "java.management",
-            "jdk.management",
-            "jdk.unsupported",
-            "java.sql",
-            "java.naming",
-        )
-    }
-    buildTypes.release.proguard {
-        version.set(libs.versions.proguard)
-        configurationFiles.from(project.file("desktop.pro"))
-        configurationFiles.from(collectDesktopConsumerRules.flatMap { it.rulesFile })
-        // Preserve reflection/JNI identities and avoid optimizer changes to Compose bytecode.
-        obfuscate.set(false)
-        optimize.set(false)
-    }
-}
-
-tasks
-    .withType<JavaExec>()
-    .matching { it.name == "run" || it.name == "runRelease" }
-    .configureEach {
-        systemProperty("gkd.projectRoot", rootProject.projectDir.absolutePath)
-        // Match Gradle's UTF-8 decoder instead of the Windows native output encoding.
-        systemProperty("stdout.encoding", "UTF-8")
-        systemProperty("stderr.encoding", "UTF-8")
-    }
-
-if (System.getProperty("os.name").startsWith("Windows", ignoreCase = true)) {
-    val archiveBaseName =
-        if (buildProperty("GKD_RENAME_PACKAGE_FLAG").isPresent) {
-            "gkd-v${rootProject.extra["gkdVersionName"]}"
-        } else {
-            "gkd"
-        }
-    val archiveArchitecture =
-        when (val architecture = System.getProperty("os.arch").lowercase()) {
-            "amd64",
-            "x86_64" -> "x86_64"
-            else -> architecture
-        }
-    tasks.register<Zip>("packageWindowsPortable") {
-        group = "compose desktop"
-        description = "Packages the Windows application and Java runtime as a portable ZIP."
-        from(tasks.named("createReleaseDistributable"))
-        archiveFileName.set("$archiveBaseName.win-$archiveArchitecture.zip")
-        destinationDirectory.set(rootProject.layout.projectDirectory.dir(".local/desktop-packages"))
-    }
 }

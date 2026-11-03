@@ -169,9 +169,6 @@ importers:
       '@types/node':
         specifier: ^26.6.5
         version: 26.6.5
-      fflate:
-        specifier: ^0.8.3
-        version: 0.8.3
       kotlin-format:
         specifier: ^0.0.11
         version: 0.0.11
@@ -316,9 +313,6 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  fflate@0.8.3:
-    resolution: {integrity: sha512-tbZNuJrLwGUp3zshBtdy4W+ORxZuIh8a5ilyIEQDC5rY1f3U20JMry0Ll3WBzU58EZKsEuJFXhb5gwv8CsPvgA==}
-
   ignore@7.0.14:
     resolution: {integrity: sha512-wCBiZ77u1tuWde6G/nfOtLaCTYcFDU5yCzARzK10y+rLhzYoL7a7yEemcopcc2Mzow7gZOIjnV2ym1NYmdiJOQ==}
     engines: {node: '>= 4'}
@@ -429,8 +423,6 @@ snapshots:
 
   '@typescript/typescript-win32-x64@7.0.2':
     optional: true
-
-  fflate@0.8.3: {}
 
   ignore@7.0.14: {}
 

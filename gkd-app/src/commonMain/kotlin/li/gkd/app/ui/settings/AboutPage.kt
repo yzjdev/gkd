@@ -39,7 +39,6 @@ import li.gkd.app.settings.SettingsRepository.settings
 import li.gkd.app.settings.UpdateChannel
 import li.gkd.app.time.format
 import li.gkd.app.ui.MainViewModel
-import li.gkd.app.ui.component.DialogRequests
 import li.gkd.app.ui.component.GkIconButton
 import li.gkd.app.ui.component.GkIcons
 import li.gkd.app.ui.component.GkPageBottomSpace
@@ -266,9 +265,7 @@ fun AboutPage() {
     )
     host.GkShareAppDialog(
         visible = showShareAppDialog,
-        dialogs = mainVm.dialogRequests,
         scope = mainVm.scope,
-        onOpenUrl = mainVm.textDialog::showUrl,
     ) {
         vm.setShowShareAppDialog(false)
     }
@@ -277,9 +274,7 @@ fun AboutPage() {
 @Composable
 expect fun UiHost.GkShareAppDialog(
     visible: Boolean,
-    dialogs: DialogRequests,
     scope: CoroutineScope,
-    onOpenUrl: (String) -> Unit,
     onDismissRequest: () -> Unit,
 )
 

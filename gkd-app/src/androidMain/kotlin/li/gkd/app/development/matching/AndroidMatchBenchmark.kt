@@ -121,9 +121,7 @@ private fun counterDelta(after: Long?, before: Long?): Long? =
  * Shares the input lane, but never writes rule state, performs input or clears framework caches.
  */
 suspend fun benchmarkAndroidMatching(input: AndroidBenchmarkRequest): AndroidBenchmarkReport {
-    require(!input.request.execute && input.request.simulation == null) {
-        "Android benchmark only reads live nodes"
-    }
+    require(!input.request.execute) { "Android benchmark only reads live nodes" }
     require(input.request.subscription.length <= 1_000_000)
     require(input.iterations in 1..50 && input.warmup in 0..10)
     require(

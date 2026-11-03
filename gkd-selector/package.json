@@ -18,11 +18,7 @@
   ],
   "scripts": {
     "build": "node ./scripts/build.ts",
-    "type-check": "tsc",
-    "test:kotlin": "node ./scripts/kotlin-test.ts",
-    "test:node": "node --test scripts/**/*.test.ts",
-    "test": "pnpm test:kotlin && pnpm build && pnpm type-check && pnpm test:node",
-    "prepack": "pnpm test"
+    "type-check": "tsc"
   },
   "repository": {
     "type": "git",

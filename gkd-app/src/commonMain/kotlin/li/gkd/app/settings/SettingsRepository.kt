@@ -243,6 +243,10 @@ object SettingsRepository {
         updateSettings { it.copy(editorWrapLines = enabled) }
     }
 
+    fun setEditorIndentSize(size: Int) {
+        updateSettings { it.copy(editorIndentSize = size.coerceIn(2, 8)) }
+    }
+
     private val storage by lazy { FileSettingsStorage(appStorage().store) }
     private val scope
         get() = applicationScope()

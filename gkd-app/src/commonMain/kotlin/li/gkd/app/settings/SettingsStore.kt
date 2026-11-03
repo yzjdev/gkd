@@ -58,6 +58,7 @@ data class SettingsStore(
     val subsExcludeAppGroupType: Int = appGroupType,
     val showDisabledRule: Boolean = true,
     val editorWrapLines: Boolean = true,
+    val editorIndentSize: Int = 2,
     val snapshotDisplayMode: Int = SnapshotDisplayMode.ByTime.value,
 ) {
     val useA11y

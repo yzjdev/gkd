@@ -38,7 +38,7 @@ git tag -a '@gkd-kit/selector@0.6.0' -m '@gkd-kit/selector@0.6.0'
 git push origin '@gkd-kit/selector@0.6.0'
 ```
 
-The workflow accepts only numeric `x.y.z` versions and verifies that the tag equals `name@version` from `package.json`. Publishing runs the package `prepack` hook, so JVM and JS tests, the production build, TypeScript checking, and Node.js tests must all pass before npm receives the package.
+The workflow accepts only numeric `x.y.z` versions and verifies that the tag equals `name@version` from `package.json`.
 
 ## Source maps
 

@@ -352,19 +352,11 @@ private fun CrashReportDialog(
                             )
                             Text(
                                 text =
-                                    if (crashData.androidVersionCode > 0) {
-                                        stringResource(
-                                            Res.string.crash_system_android_description,
-                                            crashData.androidVersionName,
-                                            crashData.androidVersionCode,
-                                        )
-                                    } else {
-                                        stringResource(
-                                            Res.string.crash_system_desktop_description,
-                                            crashData.device.removePrefix("Desktop "),
-                                            crashData.androidVersionName,
-                                        )
-                                    },
+                                    stringResource(
+                                        Res.string.crash_system_android_description,
+                                        crashData.androidVersionName,
+                                        crashData.androidVersionCode,
+                                    ),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,

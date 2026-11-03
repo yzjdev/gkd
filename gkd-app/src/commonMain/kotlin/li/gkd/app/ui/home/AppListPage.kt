@@ -27,7 +27,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
@@ -54,7 +53,6 @@ import li.gkd.app.ui.component.GkAnimatedFloatingActionButton
 import li.gkd.app.ui.component.GkAppBarTextField
 import li.gkd.app.ui.component.GkAppNameText
 import li.gkd.app.ui.component.GkCheckbox
-import li.gkd.app.ui.component.GkDesktopKeyHandler
 import li.gkd.app.ui.component.GkEmptyState
 import li.gkd.app.ui.component.GkFilterIconButton
 import li.gkd.app.ui.component.GkIcon
@@ -136,7 +134,6 @@ fun appListPage(
             }
         }
     }
-    GkDesktopKeyHandler(Key.F5, onKey = ::refresh)
     val appInfos = state.appInfos
     val searchStr = state.searchText
 

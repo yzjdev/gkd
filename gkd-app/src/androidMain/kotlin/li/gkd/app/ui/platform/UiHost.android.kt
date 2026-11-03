@@ -1,6 +1,9 @@
 package li.gkd.app.ui.platform
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.imeAnimationTarget
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -11,7 +14,6 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import li.gkd.app.MainActivity
 import li.gkd.app.ui.component.GkFullscreenDialog as AndroidFullscreenDialog
-import li.gkd.app.ui.share.optimizedImePadding
 
 actual typealias UiHost = MainActivity
 
@@ -27,7 +29,10 @@ actual fun GkFullscreenDialog(
     content: @Composable () -> Unit,
 ) = AndroidFullscreenDialog(onDismiss, content)
 
-@Composable actual fun inputInsets(): Modifier = Modifier.optimizedImePadding()
+// 使用 ime 目标 insets：键盘弹出时一次到位，不跟随键盘动画逐帧变化
+@Composable
+actual fun inputInsets(): Modifier =
+    Modifier.windowInsetsPadding(WindowInsets.imeAnimationTarget)
 
 actual fun UiHost.hideIme(): Boolean = imeController.requestHide()
 

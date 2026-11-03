@@ -23,6 +23,7 @@ import androidx.compose.material3.TextFieldColors
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -32,9 +33,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
@@ -76,6 +80,7 @@ fun UpsertRuleGroupPage(
     val draft by vm.draft.collectAsStateWithLifecycle()
     val settings by SettingsRepository.settings.collectAsStateWithLifecycle()
     val wrapLines = settings.editorWrapLines
+    val indentSize = settings.editorIndentSize
     var menuExpanded by remember { mutableStateOf(false) }
     GkSubscriptionPageContent(vm.uiState, mainVm.navigator::pop) { data ->
         val text = draft ?: data.initialText
@@ -94,6 +99,7 @@ fun UpsertRuleGroupPage(
             navigator = mainVm.navigator,
             hideIme = host::hideIme,
             actions = vm.editorActions,
+            saveBeforeMenu = true,
             menuContent = {
                 Box {
                     GkIconButton(
@@ -114,9 +120,24 @@ fun UpsertRuleGroupPage(
                             text = { Text(stringResource(Res.string.rule_editor_format)) },
                             onClick = {
                                 menuExpanded = false
-                                vm.formatDraft()?.let {
+                                vm.formatDraft(text)?.let {
                                     ToastUtils.show(Res.string.rule_editor_format_failed.getSync())
                                 }
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    stringResource(
+                                        Res.string.rule_editor_indent_size,
+                                        indentSize.toString(),
+                                    )
+                                )
+                            },
+                            onClick = {
+                                SettingsRepository.setEditorIndentSize(
+                                    if (indentSize >= 8) 2 else indentSize + 2
+                                )
                             },
                         )
                     }
@@ -137,9 +158,18 @@ fun UpsertRuleGroupPage(
             BoxWithConstraints(modifier = Modifier.scaffoldPadding(paddingValues).fillMaxSize()) {
                 val density = LocalDensity.current
                 val measurer = rememberTextMeasurer()
-                val bodyStyle = MaterialTheme.typography.bodyLarge
+                val bodyStyle =
+                    MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.Monospace)
                 CompositionLocalProvider(LocalTextStyle provides bodyStyle) {
-                    val modifier = Modifier.autoFocus(immediateFocus = true).then(inputInsets)
+                    val modifier = Modifier.autoFocus(immediateFocus = true)
+                    var fieldValue by remember { mutableStateOf(TextFieldValue(text)) }
+                    LaunchedEffect(text) {
+                        if (fieldValue.text != text) {
+                            fieldValue = fieldValue.copy(text = text)
+                        }
+                    }
+                    val scrollState = rememberScrollState()
+                    var viewportPx by remember { mutableStateOf(0) }
                     val gutterWidthPx = with(density) { EditorGutterWidth.toPx() }
                     val horizontalPaddingPx = with(density) { EditorTextHorizontalPadding.toPx() }
                     val textWidthPx =
@@ -180,23 +210,60 @@ fun UpsertRuleGroupPage(
                         }
                     val editorField: @Composable (Modifier) -> Unit = { fieldModifier ->
                         RuleTextField(
-                            text = text,
-                            onValueChange = vm::setDraft,
+                            value = fieldValue,
+                            onValueChange = { value ->
+                                fieldValue = value
+                                vm.setDraft(value.text)
+                            },
                             missingGroup = missingGroup,
                             groupKey = route.groupKey,
                             isApp = vm.isApp,
                             textColors = textColors,
+                            textStyle = bodyStyle,
                             modifier = fieldModifier,
                         )
                     }
+                    // 光标行滚动：键盘弹出或光标移动时，让光标行保持在键盘上方可视区域内
+                    val lineHeightPx =
+                        remember(bodyStyle) {
+                            measurer
+                                .measure(text = AnnotatedString("中"), style = bodyStyle, maxLines = 1)
+                                .size
+                                .height
+                        }
+                    val cursorLine =
+                        remember(fieldValue.selection, text) {
+                            text.take(fieldValue.selection.end.coerceIn(0, text.length))
+                                .count { it == '\n' }
+                        }
+                    LaunchedEffect(cursorLine, viewportPx, lineRows, lineHeightPx) {
+                        if (viewportPx <= 0) return@LaunchedEffect
+                        val visiblePx = viewportPx.toFloat().coerceAtLeast(lineHeightPx.toFloat())
+                        val cursorRowStart = lineRows.take(cursorLine).sum()
+                        val cursorRowEnd = cursorRowStart + (lineRows.getOrNull(cursorLine) ?: 1)
+                        val rowTopPx = cursorRowStart * lineHeightPx
+                        val rowBottomPx = cursorRowEnd * lineHeightPx
+                        val marginPx = lineHeightPx * 2
+                        when {
+                            rowTopPx < scrollState.value ->
+                                scrollState.scrollTo(rowTopPx.toInt())
+                            rowBottomPx + marginPx > scrollState.value + visiblePx ->
+                                scrollState.scrollTo((rowBottomPx + marginPx - visiblePx).toInt())
+                        }
+                    }
                     Row(
-                        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+                        // inputInsets 放在 verticalScroll 之前：键盘弹出时收缩视口而非撑大滚动内容
+                        modifier =
+                            Modifier.fillMaxSize()
+                                .then(inputInsets)
+                                .onSizeChanged { viewportPx = it.height }
+                                .verticalScroll(scrollState),
                         verticalAlignment = Alignment.Top,
                     ) {
                         LineNumberGutter(rows = lineRows, textStyle = bodyStyle)
                         Box(modifier = Modifier.weight(1f)) {
                             if (wrapLines) {
-                                editorField(modifier.fillMaxWidth())
+                                editorField(modifier.fillMaxSize())
                             } else {
                                 Box(
                                     modifier =
@@ -269,18 +336,20 @@ private fun LineNumberGutter(rows: List<Int>, textStyle: TextStyle) {
 
 @Composable
 private fun RuleTextField(
-    text: String,
-    onValueChange: (String) -> Unit,
+    value: TextFieldValue,
+    onValueChange: (TextFieldValue) -> Unit,
     missingGroup: Boolean,
     groupKey: Int?,
     isApp: Boolean,
     textColors: TextFieldColors,
+    textStyle: TextStyle,
     modifier: Modifier,
 ) {
     TextField(
-        value = text,
+        value = value,
         onValueChange = onValueChange,
         isError = missingGroup,
+        textStyle = textStyle,
         supportingText =
             if (missingGroup) {
                 {

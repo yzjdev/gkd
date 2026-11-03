@@ -18,6 +18,7 @@ fun GkEditor(
     navigator: AppNavigator,
     hideIme: () -> Boolean,
     actions: EditorActionsState,
+    saveBeforeMenu: Boolean = false,
     menuContent: (@Composable () -> Unit)? = null,
     content: @Composable (PaddingValues) -> Unit,
 ) {
@@ -33,6 +34,14 @@ fun GkEditor(
         }
     }
     GkBackHandler(onBack = requestClose)
-    GkEditorLayout(editor.titleContent, editor.saveEnabled, requestClose, save, menuContent, content)
+    GkEditorLayout(
+        editor.titleContent,
+        editor.saveEnabled,
+        requestClose,
+        save,
+        saveBeforeMenu = saveBeforeMenu,
+        menuContent = menuContent,
+        content = content,
+    )
     GkEditorDialogs(dialog, actions::dismissDialog, close)
 }

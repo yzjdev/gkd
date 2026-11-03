@@ -10,7 +10,6 @@ kotlin {
     android {
         namespace = "li.gkd.db"
     }
-    jvm()
 
     sourceSets {
         commonMain.dependencies {
@@ -22,11 +21,6 @@ kotlin {
         androidMain.dependencies {
             implementation(libs.androidx.sqlite.framework)
         }
-        jvmMain.dependencies { implementation(libs.androidx.sqlite.bundled) }
-        jvmTest.dependencies {
-            implementation(libs.androidx.room.testing)
-            implementation(libs.kotlin.test)
-        }
     }
 }
 
@@ -36,12 +30,4 @@ room3 {
 
 dependencies {
     add("kspAndroid", libs.androidx.room.compiler)
-    add("kspJvm", libs.androidx.room.compiler)
-}
-
-tasks.withType<Test>().configureEach {
-    systemProperty(
-        "room.schemaDirectory",
-        layout.projectDirectory.dir("schemas").asFile.absolutePath,
-    )
 }

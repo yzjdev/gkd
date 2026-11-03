@@ -6,7 +6,7 @@ import org.gradle.api.NamedDomainObjectContainer
 import org.gradle.api.Project
 
 // Keep the result independent of AGP's runtime classloader as well.
-class GkdSigningConfigs<T>(val gkd: T, val play: T)
+class GkdSigningConfigs<T>(val gkd: T)
 
 // Inline keeps AGP type access in the caller's plugin classloader.
 @Suppress("NOTHING_TO_INLINE")
@@ -22,8 +22,7 @@ inline fun Project.getOrCreateSigningConfigs(
             rootProject.file("gkd-android"),
             configs.getByName("debug"),
         )
-    val play = resolveSigningConfig(configs, "play", "PLAY", projectDir, gkd)
-    return GkdSigningConfigs(gkd, play)
+    return GkdSigningConfigs(gkd)
 }
 
 @PublishedApi

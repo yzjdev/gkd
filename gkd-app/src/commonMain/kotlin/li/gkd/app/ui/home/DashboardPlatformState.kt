@@ -10,7 +10,7 @@ import li.gkd.app.ui.navigation.PrivilegeServiceRoute
 import li.gkd.app.ui.navigation.WorkModeRoute
 import org.jetbrains.compose.resources.StringResource
 
-/** Values supplied by Android services or the Desktop Android simulator. */
+/** Values supplied by Android services. */
 data class DashboardPlatformState(
     val a11yRunning: Boolean,
     val automationRunning: Boolean,

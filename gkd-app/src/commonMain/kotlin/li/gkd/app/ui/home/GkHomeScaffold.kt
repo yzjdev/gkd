@@ -10,7 +10,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import li.gkd.app.ui.component.GkIcon
 import li.gkd.app.ui.component.GkScaffold
 
-// A desktop device profile supplies Android's bottom inset; Android uses native defaults.
+// Android supplies the bottom inset through the native scaffold.
 val LocalHomeNavigationInsets = staticCompositionLocalOf<WindowInsets?> { null }
 
 @Composable

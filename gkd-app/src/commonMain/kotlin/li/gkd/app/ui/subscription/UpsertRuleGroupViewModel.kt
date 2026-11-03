@@ -10,7 +10,9 @@ import li.gkd.app.app.AppInfoRepository
 import li.gkd.app.resources.*
 import li.gkd.app.state.Loadable
 import li.gkd.app.subscription.RawSubscription
+import li.gkd.app.settings.SettingsRepository
 import li.songe.json5.Json5
+import li.songe.json5.Json5FormatConfig
 import li.gkd.app.subscription.SubscriptionEditResult
 import li.gkd.app.subscription.SubscriptionFailureReason
 import li.gkd.app.subscription.SubscriptionInputParser
@@ -44,11 +46,12 @@ class UpsertRuleGroupViewModel(
         draft.value = value
     }
 
-    /** 用 json5 格式化当前草稿，语法非法时返回异常供界面提示。 */
-    fun formatDraft(): Exception? {
-        val current = draft.value ?: return null
+    /** 用 json5 格式化当前草稿，缩进宽度取自设置，语法非法时返回异常供界面提示。 */
+    fun formatDraft(initialText: String): Exception? {
+        val current = draft.value ?: initialText
+        val indent = " ".repeat(SettingsRepository.settings.value.editorIndentSize)
         return try {
-            setDraft(Json5.format(current))
+            setDraft(Json5.format(current, Json5FormatConfig(indent = indent)))
             null
         } catch (e: CancellationException) {
             throw e

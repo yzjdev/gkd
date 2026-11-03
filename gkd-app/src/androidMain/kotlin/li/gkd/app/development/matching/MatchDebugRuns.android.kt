@@ -18,7 +18,6 @@ actual suspend fun runMatchDebug(
     request: MatchDebugRunRequest,
     onStarted: (Long) -> Unit,
 ): MatchDebugResult {
-    require(request.simulation == null) { "Simulated trees require Desktop" }
     val service =
         checkNotNull(AndroidAutomationSessions.service) { "Accessibility service is unavailable" }
     check(AndroidAutomationSessions.isEffective(service)) {

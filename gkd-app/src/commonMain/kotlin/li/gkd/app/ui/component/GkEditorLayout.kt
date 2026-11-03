@@ -16,9 +16,18 @@ fun GkEditorLayout(
     saveEnabled: Boolean,
     onClose: () -> Unit,
     onSave: () -> Unit,
+    saveBeforeMenu: Boolean = false,
     menuContent: (@Composable () -> Unit)? = null,
     content: @Composable (PaddingValues) -> Unit,
 ) {
+    val saveButton: @Composable () -> Unit = {
+        GkIconButton(
+            GkIcons.Save,
+            contentDescription = stringResource(Res.string.action_save),
+            enabled = saveEnabled,
+            onClick = onSave,
+        )
+    }
     GkScaffold(
         contentWindowInsets =
             LocalEditorWindowInsets.current ?: ScaffoldDefaults.contentWindowInsets,
@@ -33,15 +42,15 @@ fun GkEditorLayout(
                     )
                 },
                 actions = {
+                    if (saveBeforeMenu) {
+                        saveButton()
+                    }
                     if (menuContent != null) {
                         menuContent()
                     }
-                    GkIconButton(
-                        GkIcons.Save,
-                        contentDescription = stringResource(Res.string.action_save),
-                        enabled = saveEnabled,
-                        onClick = onSave,
-                    )
+                    if (!saveBeforeMenu) {
+                        saveButton()
+                    }
                 },
             )
         },

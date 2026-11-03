@@ -124,9 +124,6 @@
     <string name="activity_switch_logs">界面切换日志</string>
     <string name="add_success">添加成功</string>
     <string name="advanced_settings">工具</string>
-    <string name="apk_continue_suffix">，或点击下方继续操作</string>
-    <string name="apk_download_official_link">建议点此从官网下载</string>
-    <string name="apk_google_services_required">当前导出的 APK 文件只能在已安装 Google 框架的设备上才能使用，否则安装打开后会提示报错，</string>
     <string name="apk_share">分享安装文件</string>
     <string name="app_count">%1$s 个应用</string>
     <string name="app_details_open">打开应用详情页面</string>
@@ -287,7 +284,6 @@
     <string name="crash_reports_delete_partially_failed">部分崩溃记录删除失败</string>
     <string name="crash_reports_empty">暂无崩溃记录</string>
     <string name="crash_system_android_description">系统：Android %1$s (API %2$s)</string>
-    <string name="crash_system_desktop_description">系统：%1$s / %2$s</string>
     <string name="crash_thread_description">线程：%1$s</string>
     <string name="crash_version_thread">v%1$s (%2$s) · %3$s</string>
     <string name="theme_mode">主题模式</string>
@@ -389,7 +385,6 @@
     <string name="rule_display_switch_to_flat">切换为普通列表</string>
     <string name="rule_category_uncategorized">未分类</string>
     <string name="global_rules_view_list">查看全局规则列表</string>
-    <string name="google_play_label">Google Play</string>
     <string name="group_title">分组</string>
     <string name="help_title">帮助</string>
     <string name="help_view">查看帮助</string>
@@ -574,6 +569,7 @@
     <string name="rule_editor_format">格式化</string>
     <string name="rule_editor_format_failed">格式化失败，请检查语法</string>
     <string name="rule_editor_wrap_lines">自动换行</string>
+    <string name="rule_editor_indent_size">缩进宽度：%1$s 空格</string>
     <string name="rule_enable">启用规则</string>
     <string name="rule_enable_in_app">在此应用启用</string>
     <string name="rule_explicit_app_override_note">（此应用已被规则明确%1$s，版本条件不参与判断）</string>
@@ -1039,7 +1035,6 @@
     <string name="app_rule_whitelist_remove_follow_confirm">将当前应用移出应用白名单？\n\n局部关闭正在跟随应用白名单，此应用的局部关闭也将同时解除。规则开关配置保持不变</string>
     <string name="app_rule_partial_disable_remove_confirm">将当前应用移出无障碍白名单？\n\n移除后，不再因局部关闭功能在此应用内关闭服务。应用白名单和规则开关配置保持不变</string>
     <string name="webview_content">网页内容</string>
-    <string name="webview_runtime_install">WebView2 Runtime 安装说明</string>
     <string name="webview_shutdown_pending">网页仍在释放资源，请稍后重试关闭窗口</string>
     <string name="webview_load_failed">暂时无法打开网页</string>
     <string name="webview_retry">重新加载</string>

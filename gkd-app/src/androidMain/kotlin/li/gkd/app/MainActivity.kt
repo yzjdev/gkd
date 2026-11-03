@@ -21,7 +21,6 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.initializer
 import java.io.File
 import kotlinx.coroutines.launch
-import li.gkd.app.development.DesktopProfileExport
 import li.gkd.app.permission.PermissionRequests
 import li.gkd.app.permission.PermissionStates
 import li.gkd.app.platform.PlatformResult
@@ -123,8 +122,7 @@ class MainActivity : ComponentActivity() {
         permissionRequestHost.bind(mainVm.androidState.permissionRequests)
         mainVm.registerCurrent()
         addOnNewIntentListener {
-            if (!DesktopProfileExport.handle(this@MainActivity, it))
-                mainVm.androidState.handleIntent(it)
+            mainVm.androidState.handleIntent(it)
             MainActivityIntents.consume(this)
         }
         StatusService.autoStart()
@@ -145,8 +143,7 @@ class MainActivity : ComponentActivity() {
             }
             LaunchedEffect(Unit) {
                 MainActivityIntents.pending(intent)?.let {
-                    if (!DesktopProfileExport.handle(this@MainActivity, it))
-                        mainVm.androidState.handleIntent(it)
+                    mainVm.androidState.handleIntent(it)
                     MainActivityIntents.consume(this@MainActivity)
                 }
             }

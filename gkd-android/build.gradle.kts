@@ -64,9 +64,6 @@ android {
             isDefault = true
             signingConfig = signing.gkd
         }
-        create("play") {
-            signingConfig = signing.play
-        }
         all {
             dimension = flavorDimensions.first()
             manifestPlaceholders["channel"] = name

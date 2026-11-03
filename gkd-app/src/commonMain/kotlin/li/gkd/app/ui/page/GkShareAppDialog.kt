@@ -10,7 +10,6 @@ fun GkShareAppDialog(
     onDismiss: () -> Unit,
     onShare: () -> Unit,
     onSave: () -> Unit,
-    onPlay: () -> Unit,
 ) {
     GkTextListDialog(
         onDismiss = onDismiss,
@@ -18,7 +17,6 @@ fun GkShareAppDialog(
             listOf(
                 stringResource(Res.string.action_share) to onShare,
                 stringResource(Res.string.action_save_to_downloads) to onSave,
-                stringResource(Res.string.google_play_label) to onPlay,
             ),
     )
 }

@@ -16,7 +16,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
@@ -34,7 +33,6 @@ import li.gkd.app.ui.MainViewModel
 import li.gkd.app.ui.component.GkAlertDialog
 import li.gkd.app.ui.component.GkAnimatedFloatingActionButton
 import li.gkd.app.ui.component.GkBatchActionMenuItem
-import li.gkd.app.ui.component.GkDesktopKeyHandler
 import li.gkd.app.ui.component.GkIcons
 import li.gkd.app.ui.component.GkLoadingState
 import li.gkd.app.ui.component.GkMatchingBanner
@@ -81,7 +79,6 @@ private fun subsManageContent(
     val refresh: () -> Unit = {
         vm.scope.launchUi { vm.refreshSubscriptions().message()?.let { ToastUtils.show(it) } }
     }
-    GkDesktopKeyHandler(Key.F5, onKey = refresh)
     val settingsDialogVisible by vm.settingsDialogVisible.collectAsStateWithLifecycle()
     val powerWarningItem by vm.powerWarningItemFlow.collectAsStateWithLifecycle()
     val store by SettingsRepository.settings.collectAsStateWithLifecycle()
