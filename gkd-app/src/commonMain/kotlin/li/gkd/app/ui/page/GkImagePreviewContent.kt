@@ -38,10 +38,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.isSpecified
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -65,6 +67,7 @@ import coil3.request.crossfade
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlin.math.min
 import li.gkd.app.resources.*
 import li.gkd.app.ui.component.GkIconButton
 import li.gkd.app.ui.component.GkIcons
@@ -103,9 +106,14 @@ fun GkImagePreviewContent(
     pagerState: PagerState? = null,
     titleContent: (@Composable (Int) -> Unit)? = null,
     actionContent: @Composable RowScope.(String?, Int) -> Unit = { _, _ -> },
+    pageOverlay: @Composable (Int) -> Unit = {},
+    hideBars: Boolean = false,
 ) {
     val context = LocalPlatformContext.current
     var showBars by remember { mutableStateOf(true) }
+    // 外部开关联动到原有的 showBars，沿用同一套隐藏动画与 systemBars 逻辑
+    LaunchedEffect(hideBars) { showBars = !hideBars }
+    val toggleBars = { if (!hideBars) showBars = !showBars }
 
     val previewItems = route.items
     val previewUris = remember(previewItems) { previewItems.map { it.uri } }
@@ -148,7 +156,8 @@ fun GkImagePreviewContent(
                         imageLoader = imageLoader,
                         uri = singleItem.uri,
                         version = imageVersion,
-                        onToggleBars = { showBars = !showBars },
+                        onToggleBars = toggleBars,
+                        overlay = { pageOverlay(0) },
                     )
                 }
             }
@@ -163,7 +172,8 @@ fun GkImagePreviewContent(
                                 imageLoader = imageLoader,
                                 uri = previewItems[index].uri,
                                 version = imageVersion,
-                                onToggleBars = { showBars = !showBars },
+                                onToggleBars = toggleBars,
+                                overlay = { pageOverlay(index) },
                             )
                         }
                     },
@@ -283,6 +293,7 @@ private fun UriImage(
     uri: String,
     version: Int,
     onToggleBars: () -> Unit = {},
+    overlay: @Composable () -> Unit = {},
 ) {
     val context = LocalPlatformContext.current
 
@@ -376,6 +387,7 @@ private fun UriImage(
                         uri = uri,
                         painter = painter,
                         onToggleBars = onToggleBars,
+                        overlay = overlay,
                     )
                 }
             }
@@ -420,6 +432,7 @@ private fun ZoomableImageContent(
     uri: String,
     painter: Painter,
     onToggleBars: () -> Unit,
+    overlay: @Composable () -> Unit = {},
 ) {
     // 每个 pager page 都独立持有一个 ZoomableState，避免翻页后复用缩放位置。
     val zoomableState = rememberZoomableState()
@@ -444,18 +457,53 @@ private fun ZoomableImageContent(
         modifier = Modifier.fillMaxSize().background(Color.Black),
         contentAlignment = Alignment.Center,
     ) {
-        Image(
-            painter = painter,
-            contentDescription = null,
+        Box(
             modifier =
                 Modifier.fillMaxSize()
                     .zoomable(
                         state = zoomableState,
                         onClick = { onToggleBars() },
                     ),
-            contentScale = ContentScale.Inside,
-            alignment = Alignment.Center,
-        )
+            contentAlignment = Alignment.Center,
+        ) {
+            Image(
+                painter = painter,
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Inside,
+                alignment = Alignment.Center,
+            )
+            // 叠加层与图片共用同一个缩放容器，按图片实际绘制区域摆放，不需要重复加载图片
+            if (
+                intrinsicSize.isSpecified &&
+                    intrinsicSize.width > 0f &&
+                    intrinsicSize.height > 0f
+            ) {
+                BoxWithConstraints(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    val density = LocalDensity.current
+                    val fitScale =
+                        min(
+                            min(
+                                constraints.maxWidth / intrinsicSize.width,
+                                constraints.maxHeight / intrinsicSize.height,
+                            ),
+                            1f,
+                        )
+                    Box(
+                        modifier =
+                            Modifier.size(
+                                width = with(density) { (intrinsicSize.width * fitScale).toDp() },
+                                height = with(density) { (intrinsicSize.height * fitScale).toDp() },
+                            ),
+                    ) {
+                        overlay()
+                    }
+                }
+            }
+        }
     }
 }
 

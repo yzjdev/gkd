@@ -1,5 +1,6 @@
 package li.gkd.app.ui.subscription
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -9,6 +10,7 @@ import li.gkd.app.app.AppInfoRepository
 import li.gkd.app.resources.*
 import li.gkd.app.state.Loadable
 import li.gkd.app.subscription.RawSubscription
+import li.songe.json5.Json5
 import li.gkd.app.subscription.SubscriptionEditResult
 import li.gkd.app.subscription.SubscriptionFailureReason
 import li.gkd.app.subscription.SubscriptionInputParser
@@ -40,6 +42,19 @@ class UpsertRuleGroupViewModel(
     fun setDraft(value: String) {
         beginEditing()
         draft.value = value
+    }
+
+    /** 用 json5 格式化当前草稿，语法非法时返回异常供界面提示。 */
+    fun formatDraft(): Exception? {
+        val current = draft.value ?: return null
+        return try {
+            setDraft(Json5.format(current))
+            null
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            e
+        }
     }
 
     val groupKey

@@ -1,6 +1,6 @@
 # GKD Desktop 开发
 
-`gkd-app` 内置 Desktop 开发宿主，默认运行与 Android 共用的首页、订阅、应用、设置四标签及生产路由。平台不支持的具体动作显示 Toast；页面编辑与数据读写使用真实业务实现。模块、依赖和资源说明见 [应用架构](../docs/architecture.md)，目录布局见 [本地开发产物](../docs/local-development.md)，开发约束见 [AGENTS.md](../AGENTS.md)。
+`gkd-app` 内置 Desktop 开发宿主，默认运行与 Android 共用的首页、订阅、应用、快照、设置五标签及生产路由。平台不支持的具体动作显示 Toast；页面编辑与数据读写使用真实业务实现。模块、依赖和资源说明见 [应用架构](../docs/architecture.md)，目录布局见 [本地开发产物](../docs/local-development.md)，开发约束见 [AGENTS.md](../AGENTS.md)。
 
 ## 启动与验证
 

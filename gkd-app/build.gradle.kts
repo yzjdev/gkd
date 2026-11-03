@@ -108,6 +108,7 @@ kotlin {
             api(libs.permissions)
             api(libs.device)
             api(libs.androidx.core.ktx)
+            api(libs.sweetline)
             // Control Android Compose independently of CMP; export the same versions to the app.
             api(libs.compose.animation)
             api(libs.compose.foundation)

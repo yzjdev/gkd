@@ -571,6 +571,9 @@
     <string name="rule_delete">删除规则</string>
     <string name="rule_edit">编辑规则</string>
     <string name="rule_edit_conflict">规则已发生变化，请重新编辑</string>
+    <string name="rule_editor_format">格式化</string>
+    <string name="rule_editor_format_failed">格式化失败，请检查语法</string>
+    <string name="rule_editor_wrap_lines">自动换行</string>
     <string name="rule_enable">启用规则</string>
     <string name="rule_enable_in_app">在此应用启用</string>
     <string name="rule_explicit_app_override_note">（此应用已被规则明确%1$s，版本条件不参与判断）</string>
@@ -738,6 +741,7 @@
     <string name="snapshot_app_a11y_missing">当前应用没有无障碍信息，捕获失败</string>
     <string name="snapshot_auto_export">自动保存至下载</string>
     <string name="snapshot_auto_export_description">快照完成后导出 ZIP 文件</string>
+    <string name="snapshot_bounds_show">查看边界</string>
     <string name="upload_batch_progress">正在上传第 %1$s/%2$s 条</string>
     <string name="upload_batch_result">批量上传结果</string>
     <string name="upload_batch_summary">成功 %1$s 条，未完成 %2$s 条</string>

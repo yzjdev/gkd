@@ -16,9 +16,11 @@ import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.decodeFromJsonElement
 import li.gkd.app.app.AppInfoRepository
 import li.gkd.app.logging.LogUtils
 import li.gkd.app.model.ComplexSnapshot
+import li.gkd.app.model.SnapshotNodeBounds
 import li.gkd.app.snapshot.platform.prepareSnapshotReplacement
 import li.gkd.app.storage.ExportFileNames
 import li.gkd.app.storage.SnapshotIssue
@@ -62,6 +64,26 @@ object SnapshotStore {
     fun snapshotFile(id: Long): File = fileLayout.committed(id).snapshotFile
 
     fun screenshotFile(id: Long): File = fileLayout.committed(id).screenshotFile
+
+    /** 读取快照文件中的节点边界，文件缺失或解析失败时返回空列表。 */
+    suspend fun readNodeBounds(snapshotId: Long): List<SnapshotNodeBounds> =
+        withContext(Dispatchers.IO) {
+            val file = snapshotFile(snapshotId)
+            if (!file.isFile || file.length() <= 0L) return@withContext emptyList()
+            try {
+                val nodes =
+                    ((json.parseToJsonElement(file.readText()) as? JsonObject)?.get("nodes")
+                        as? JsonArray) ?: return@withContext emptyList()
+                nodes.mapNotNull { node ->
+                    val attr = (node as? JsonObject)?.get("attr") as? JsonObject
+                    attr?.let { json.decodeFromJsonElement<SnapshotNodeBounds>(it) }
+                        ?.takeUnless { it.isEmpty }
+                }
+            } catch (e: Exception) {
+                LogUtils.e("读取快照节点边界失败", e)
+                emptyList()
+            }
+        }
 
     suspend fun markUploaded(
         snapshotId: Long,

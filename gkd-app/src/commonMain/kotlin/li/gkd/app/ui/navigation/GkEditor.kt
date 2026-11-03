@@ -18,6 +18,7 @@ fun GkEditor(
     navigator: AppNavigator,
     hideIme: () -> Boolean,
     actions: EditorActionsState,
+    menuContent: (@Composable () -> Unit)? = null,
     content: @Composable (PaddingValues) -> Unit,
 ) {
     val entry = remember { navigator.topEntry }
@@ -32,6 +33,6 @@ fun GkEditor(
         }
     }
     GkBackHandler(onBack = requestClose)
-    GkEditorLayout(editor.titleContent, editor.saveEnabled, requestClose, save, content)
+    GkEditorLayout(editor.titleContent, editor.saveEnabled, requestClose, save, menuContent, content)
     GkEditorDialogs(dialog, actions::dismissDialog, close)
 }

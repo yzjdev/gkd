@@ -12,9 +12,11 @@ import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -41,6 +43,7 @@ import li.gkd.app.ui.navigation.ImagePreviewRoute
 import li.gkd.app.ui.navigation.SnapshotPageRoute
 import li.gkd.app.ui.navigation.SnapshotPreviewRoute
 import li.gkd.app.ui.page.GkImagePreviewContent
+import li.gkd.app.ui.platform.GkBackHandler
 import li.gkd.app.ui.platform.GkSystemBars
 import li.gkd.app.ui.platform.LocalUiHost
 import org.jetbrains.compose.resources.stringResource
@@ -63,6 +66,9 @@ fun SnapshotPreviewPage(
         key(route) {
             val actionRequest by vm.actionRequest.collectAsStateWithLifecycle()
             var imageVersion by remember { mutableIntStateOf(0) }
+            var boundsVisible by remember { mutableStateOf(false) }
+            // 边界模式下隐藏了顶栏，返回键退出边界并恢复 bars
+            GkBackHandler(boundsVisible) { boundsVisible = false }
             val snapshotsById = state?.associateBy { it.id }.orEmpty()
             val previewSnapshots = route.snapshotIds.mapNotNull(snapshotsById::get)
 
@@ -73,6 +79,7 @@ fun SnapshotPreviewPage(
                     rememberPagerState(initialPage = initialPage) {
                         previewSnapshots.size
                     }
+                val nodeBounds by vm.nodeBounds.collectAsStateWithLifecycle()
                 GkImagePreviewContent(
                     imageLoader = imageLoader,
                     systemBars = { host.GkSystemBars(it) },
@@ -122,6 +129,13 @@ fun SnapshotPreviewPage(
                         val item = previewSnapshots.getOrNull(index)
                         if (item != null) {
                             GkIconButton(
+                                imageVector = GkIcons.BorderStyle,
+                                contentDescription = stringResource(Res.string.snapshot_bounds_show),
+                                colors =
+                                    IconButtonDefaults.iconButtonColors(contentColor = Color.White),
+                                onClick = { boundsVisible = true },
+                            )
+                            GkIconButton(
                                 imageVector = GkIcons.MoreVert,
                                 contentDescription = stringResource(Res.string.more_label),
                                 colors =
@@ -130,6 +144,21 @@ fun SnapshotPreviewPage(
                             )
                         }
                     },
+                    pageOverlay = { index ->
+                        val item = previewSnapshots.getOrNull(index)
+                        if (item != null) {
+                            if (boundsVisible) {
+                                LaunchedEffect(item.id) { vm.loadNodeBounds(item.id) }
+                            }
+                            GkSnapshotBoundsOverlay(
+                                showBounds = boundsVisible,
+                                nodes = nodeBounds[item.id].orEmpty(),
+                                screenWidth = item.screenWidth,
+                                screenHeight = item.screenHeight,
+                            )
+                        }
+                    },
+                    hideBars = boundsVisible,
                 )
 
                 val actionSnapshot = actionRequest?.let { request ->

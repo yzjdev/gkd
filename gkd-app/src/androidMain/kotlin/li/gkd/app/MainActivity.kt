@@ -41,6 +41,8 @@ import li.gkd.app.ui.createMainViewModel
 import li.gkd.app.ui.share.ActivityImeController
 import li.gkd.app.ui.share.ActivityResultRequests
 import li.gkd.app.ui.share.FixedWindowInsets
+import li.gkd.app.ui.style.LocalRuleTextHighlighter
+import li.gkd.app.ui.style.sweetLineRuleTextTransformation
 import li.gkd.app.ui.theme.installThemedSplashScreen
 import li.gkd.app.util.AndroidTarget
 import li.gkd.app.util.BarUtils
@@ -137,6 +139,7 @@ class MainActivity : ComponentActivity() {
             }
             CompositionLocalProvider(
                 LocalTopBarWindowInsets provides topBarWindowInsets,
+                LocalRuleTextHighlighter provides ::sweetLineRuleTextTransformation,
             ) {
                 AppRoot()
             }

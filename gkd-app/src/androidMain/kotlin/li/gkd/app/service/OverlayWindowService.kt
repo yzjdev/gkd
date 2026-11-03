@@ -4,6 +4,7 @@ import android.animation.ValueAnimator
 import android.annotation.SuppressLint
 import android.content.res.Configuration
 import android.graphics.PixelFormat
+import android.view.Choreographer
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.ViewConfiguration
@@ -35,6 +36,7 @@ import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import kotlin.coroutines.resume
 import kotlin.math.abs
 import kotlin.time.Duration.Companion.milliseconds
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
@@ -48,6 +50,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import li.gkd.app.app
 import li.gkd.app.matching.input.topActivityFlow
 import li.gkd.app.permission.PermissionStates
@@ -73,6 +76,52 @@ private fun acquireShareContext(): ShareContextLease {
     return ShareContextLease(shareContext)
 }
 
+/** 截图前隐藏所有悬浮窗内容，并等待隐藏后的画面绘制并合成上屏 */
+suspend fun hideOverlayContent() {
+    val shareContext = tempShareContext ?: return
+    withContext(Dispatchers.Main.immediate) {
+        shareContext.hiddenDepth++
+        shareContext.overlayContentHidden = true
+        awaitOverlayFrameComposited()
+    }
+}
+
+/** 恢复所有悬浮窗内容绘制，与 [hideOverlayContent] 配对使用 */
+fun showOverlayContent() {
+    val shareContext = tempShareContext ?: return
+    ThreadUtils.runMainOrPost {
+        shareContext.hiddenDepth = (shareContext.hiddenDepth - 1).coerceAtLeast(0)
+        if (shareContext.hiddenDepth == 0) {
+            shareContext.overlayContentHidden = false
+        }
+    }
+}
+
+/**
+ * 隐藏后等待 3 帧：一次重绘、一次合成上屏，第三帧再发起截图。
+ * 只等一帧时取到的仍是隐藏前的合成结果，悬浮窗会被截进去。
+ */
+private suspend fun awaitOverlayFrameComposited() =
+    suspendCancellableCoroutine<Unit> { continuation ->
+        val choreographer = Choreographer.getInstance()
+        val callback =
+            object : Choreographer.FrameCallback {
+                var remaining = 3
+
+                override fun doFrame(frameTimeNanos: Long) {
+                    if (!continuation.isActive) return
+                    remaining--
+                    if (remaining > 0) {
+                        choreographer.postFrameCallback(this)
+                    } else {
+                        continuation.resume(Unit)
+                    }
+                }
+            }
+        continuation.invokeOnCancellation { choreographer.removeFrameCallback(callback) }
+        choreographer.postFrameCallback(callback)
+    }
+
 private class ShareContextLease(val context: ShareContext) : AutoCloseable {
     override fun close() {
         context.count--
@@ -85,6 +134,7 @@ private class ShareContextLease(val context: ShareContext) : AutoCloseable {
 
 private class ShareContext {
     var count = 0
+    var hiddenDepth = 0
     var overlayContentHidden by mutableStateOf(false)
     val scope = MainScope()
 
@@ -219,48 +269,23 @@ abstract class OverlayWindowService(
     protected val isOverlayContentHidden
         get() = shareContext.overlayContentHidden
 
-    protected suspend fun <T> withAllOverlaysHidden(block: suspend () -> T): T {
-        shareContext.overlayContentHidden = true
-        return try {
-            awaitOverlayContentHidden()
-            block()
-        } finally {
-            shareContext.overlayContentHidden = false
-        }
-    }
-
-    private suspend fun awaitOverlayContentHidden() = suspendCancellableCoroutine { continuation ->
-        val afterFrame = Runnable {
-            if (continuation.isActive) continuation.resume(Unit)
-        }
-        val onFrame = Runnable {
-            if (continuation.isActive) view.post(afterFrame)
-        }
-        continuation.invokeOnCancellation {
-            view.removeCallbacks(onFrame)
-            view.removeCallbacks(afterFrame)
-        }
-        view.postOnAnimation(onFrame)
-    }
-
     private val minMargin
         get() = 10.dp.px.toInt()
+
+    protected open val centerByDefault: Boolean
+        get() = false
 
     private val defaultPosition
         get() = listOf(minMargin, BarUtils.getStatusHeight())
 
     private lateinit var shareContext: ShareContext
 
+    private val initialPosition by lazy {
+        SettingsRepository.overlayPositions.value[positionKey]?.takeIf { it.size >= 2 }
+    }
+
     private val positionFlow by lazy {
-        MutableStateFlow(
-            SettingsRepository.overlayPositions.value[positionKey].let {
-                if (it != null && it.size >= 2) {
-                    it
-                } else {
-                    defaultPosition
-                }
-            },
-        )
+        MutableStateFlow(initialPosition ?: defaultPosition)
     }
 
     init {
@@ -304,6 +329,7 @@ abstract class OverlayWindowService(
         var screenSize = ScreenUtils.getSize()
         var paramsXy = layoutParams.x to layoutParams.y
         var positionAnimator: ValueAnimator? = null
+        var pendingCenter = centerByDefault && initialPosition == null
         onDestroyed { positionAnimator?.cancel() }
         val fixLimitXy = {
             screenSize = ScreenUtils.getSize()
@@ -338,7 +364,17 @@ abstract class OverlayWindowService(
         }
         lifecycleScope.launch {
             view.viewTreeObserver.addOnGlobalLayoutListener { launch { resizeFlow.emit(Unit) } }
-            resizeFlow.debounce(100.milliseconds).collect { fixLimitXy() }
+            resizeFlow.debounce(100.milliseconds).collect {
+                if (pendingCenter) {
+                    pendingCenter = false
+                    screenSize = ScreenUtils.getSize()
+                    layoutParams.x = (screenSize.width - view.width) / 2
+                    layoutParams.y = (screenSize.height - view.height) / 2
+                    positionFlow.value = listOf(layoutParams.x, layoutParams.y)
+                    app.windowManager.updateViewLayout(view, layoutParams)
+                }
+                fixLimitXy()
+            }
         }
         var downXy: Pair<Float, Float>? = null
         var longClickJob: Job? = null

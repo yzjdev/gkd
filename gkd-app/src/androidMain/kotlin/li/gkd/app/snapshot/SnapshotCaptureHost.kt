@@ -33,6 +33,8 @@ import li.gkd.app.platform.PlatformResult
 import li.gkd.app.priv.privilegeContextFlow
 import li.gkd.app.resources.*
 import li.gkd.app.service.ScreenshotService
+import li.gkd.app.service.hideOverlayContent
+import li.gkd.app.service.showOverlayContent
 import li.gkd.app.settings.AutomatorMode
 import li.gkd.app.settings.SettingsRepository.settings
 import li.gkd.app.snapshot.platform.encodeSnapshotScreenshot
@@ -290,39 +292,46 @@ object SnapshotCaptureHost {
                 ?: throw InspectionException(InspectionFailure.AccessibilityAuthorizationRequired)
         val settings = settings.value
         val outcome =
-            SnapshotCaptureRepository.capture(settings.autoSaveSnapshotToDownloads) {
-                val rootNode =
-                    AndroidAutomationSessions.getRoot(service)
-                        ?: throw InspectionException(InspectionFailure.SnapshotNodesUnavailable)
-                val appId = rootNode.packageName.toString()
-                val screenSize = ScreenUtils.getSize()
-                val isLandscape = ScreenUtils.isLandscape()
-                coroutineScope {
-                    val nodes = async(Dispatchers.IO) { captureNodeInfoList(rootNode) }
-                    val activityId = async(Dispatchers.IO) { resolveActivityId(appId) }
-                    val screenshot =
-                        async(Dispatchers.Default) {
-                            captureScreen(
-                                appId,
-                                service.mode,
-                                forcedCropStatusBar,
-                                settings.hideSnapshotStatusBar,
+            try {
+                hideOverlayContent()
+                SnapshotCaptureRepository.capture(settings.autoSaveSnapshotToDownloads) {
+                    val rootNode =
+                        AndroidAutomationSessions.getRoot(service)
+                            ?: throw InspectionException(
+                                InspectionFailure.SnapshotNodesUnavailable,
                             )
-                        }
-                    val screen = screenshot.await()
-                    SnapshotCaptureInput(
-                        appId = appId,
-                        activityId = activityId.await(),
-                        screenSize = screenSize,
-                        isLandscape = isLandscape,
-                        nodes = nodes.await(),
-                        appInfo = AppInfoRepository.snapshot?.apps?.get(appId),
-                        gkdAppInfo = selfAppInfo,
-                        device = currentDeviceInfo(),
-                        screenshot = screen.bytes,
-                        screenshotStatus = screen.status,
-                    )
+                    val appId = rootNode.packageName.toString()
+                    val screenSize = ScreenUtils.getSize()
+                    val isLandscape = ScreenUtils.isLandscape()
+                    coroutineScope {
+                        val nodes = async(Dispatchers.IO) { captureNodeInfoList(rootNode) }
+                        val activityId = async(Dispatchers.IO) { resolveActivityId(appId) }
+                        val screenshot =
+                            async(Dispatchers.Default) {
+                                captureScreen(
+                                    appId,
+                                    service.mode,
+                                    forcedCropStatusBar,
+                                    settings.hideSnapshotStatusBar,
+                                )
+                            }
+                        val screen = screenshot.await()
+                        SnapshotCaptureInput(
+                            appId = appId,
+                            activityId = activityId.await(),
+                            screenSize = screenSize,
+                            isLandscape = isLandscape,
+                            nodes = nodes.await(),
+                            appInfo = AppInfoRepository.snapshot?.apps?.get(appId),
+                            gkdAppInfo = selfAppInfo,
+                            device = currentDeviceInfo(),
+                            screenshot = screen.bytes,
+                            screenshotStatus = screen.status,
+                        )
+                    }
                 }
+            } finally {
+                showOverlayContent()
             }
         val captured =
             when (outcome) {

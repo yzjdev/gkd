@@ -23,12 +23,13 @@ class ButtonService :
     OverlayWindowService(
         positionKey = "button",
     ) {
+    override val centerByDefault: Boolean
+        get() = true
+
     override fun onClickView() {
         if (isOverlayContentHidden) return
         lifecycleScope.launchUi {
-            withAllOverlaysHidden {
-                SnapshotCaptureHost.capture()
-            }
+            SnapshotCaptureHost.capture()
         }
     }
 

@@ -24,6 +24,7 @@ import li.gkd.app.matching.MatchingRuntime
 import li.gkd.app.matching.diagnostics.MatchServiceEvent
 import li.gkd.app.record.RuntimeRecordRepository
 import li.gkd.app.resources.*
+import li.gkd.app.service.showOverlayContent
 import li.gkd.app.settings.AutomatorMode
 import li.gkd.app.store.AppStore.updateEnableAutomator
 import li.gkd.app.util.AndroidTarget
@@ -60,7 +61,7 @@ private constructor(
 
     override suspend fun screenshot(): Bitmap? =
         withContext(Dispatchers.IO) {
-            privilegeContext.screenshot()
+            privilegeContext.screenshot()?.also { showOverlayContent() }
         }
 
     override val windowNodeInfo: AccessibilityNodeInfo?

@@ -268,6 +268,7 @@ class DesktopState(
                 BottomNavItem.Dashboard.key to "dashboard",
                 BottomNavItem.SubsManage.key to "subscriptions",
                 BottomNavItem.AppList.key to "apps",
+                BottomNavItem.Snapshot.key to "snapshots",
                 BottomNavItem.Settings.key to "settings",
             )
         }
@@ -309,7 +310,6 @@ private val desktopRoutes by lazy {
         "app-config" to AppConfigRoute("li.gkd"),
         "action-log" to ActionLogRoute(),
         "image-preview" to ImagePreviewRoute(),
-        "snapshots" to SnapshotPageRoute,
         "snapshot-preview" to SnapshotPreviewRoute(0, emptyList()),
         "web-view" to WebViewRoute(AppLinks.Home),
         "privilege-service" to PrivilegeServiceRoute,
@@ -329,6 +329,7 @@ fun routeName(route: AppRoute): String =
         is SubsGlobalGroupExcludeRoute -> "subs-global-exclude"
         is RuleExcludeEditorRoute -> "rule-exclude-editor"
         is WebViewRoute -> "web-view"
+        SnapshotPageRoute -> "snapshots"
         is SnapshotPreviewRoute -> "snapshot-preview"
         is ImagePreviewRoute -> "image-preview"
         is AppConfigRoute -> "app-config"

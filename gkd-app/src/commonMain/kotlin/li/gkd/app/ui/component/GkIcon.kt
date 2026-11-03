@@ -51,7 +51,9 @@ import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.RemoveCircleOutline
 import androidx.compose.material.icons.outlined.RocketLaunch
+import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.BorderStyle
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.TextFields
 import androidx.compose.material.icons.outlined.Title
@@ -338,6 +340,12 @@ object GkIcons {
 
     val CenterFocusWeak
         get() = Icons.Default.CenterFocusWeak
+
+    val BorderStyle
+        get() = Icons.Outlined.BorderStyle
+
+    val Save
+        get() = Icons.Outlined.Save
 
     val AutoMode
         get() = Icons.Outlined.AutoMode

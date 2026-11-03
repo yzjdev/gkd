@@ -1,0 +1,1 @@
+adb -s adb-10AFB53K8E003N5-dM4z4M._adb-tls-connect._tcp install -r -t E:\Projects\as\gkd\gkd-android\build\outputs\apk\gkd\debug\gkd-android-gkd-debug.apk

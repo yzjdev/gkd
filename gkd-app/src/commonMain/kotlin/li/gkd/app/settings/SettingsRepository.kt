@@ -239,6 +239,10 @@ object SettingsRepository {
         }
     }
 
+    fun setEditorWrapLines(enabled: Boolean) {
+        updateSettings { it.copy(editorWrapLines = enabled) }
+    }
+
     private val storage by lazy { FileSettingsStorage(appStorage().store) }
     private val scope
         get() = applicationScope()

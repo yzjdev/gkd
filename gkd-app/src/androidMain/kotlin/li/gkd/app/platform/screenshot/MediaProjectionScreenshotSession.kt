@@ -19,6 +19,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import li.gkd.app.app
 import li.gkd.app.logging.LogUtils
 import li.gkd.app.resources.*
+import li.gkd.app.service.showOverlayContent
 import li.gkd.app.util.ScreenUtils
 import li.gkd.app.util.isFullTransparent
 import org.jetbrains.compose.resources.StringResource
@@ -254,6 +255,8 @@ class MediaProjectionScreenshotSession(
         }
         releaseActiveCapture()
         result?.let { captured ->
+            // 图像已从 ImageReader 取出，画面内容已固定，立即恢复悬浮窗显示
+            showOverlayContent()
             if (continuation.isActive) {
                 continuation.resume(captured)
             } else {

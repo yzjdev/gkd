@@ -36,6 +36,13 @@ sealed class BottomNavItem(
             icon = GkIcons.Android,
         )
 
+    object Snapshot :
+        BottomNavItem(
+            key = 4,
+            labelResource = Res.string.snapshot_title,
+            icon = GkIcons.Image,
+        )
+
     object Settings :
         BottomNavItem(
             key = 3,
@@ -44,6 +51,6 @@ sealed class BottomNavItem(
         )
 
     companion object {
-        val allSubObjects by lazy { arrayOf(Dashboard, SubsManage, AppList, Settings) }
+        val allSubObjects by lazy { arrayOf(Dashboard, SubsManage, AppList, Snapshot, Settings) }
     }
 }

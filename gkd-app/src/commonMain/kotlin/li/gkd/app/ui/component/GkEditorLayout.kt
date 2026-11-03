@@ -16,6 +16,7 @@ fun GkEditorLayout(
     saveEnabled: Boolean,
     onClose: () -> Unit,
     onSave: () -> Unit,
+    menuContent: (@Composable () -> Unit)? = null,
     content: @Composable (PaddingValues) -> Unit,
 ) {
     GkScaffold(
@@ -32,8 +33,11 @@ fun GkEditorLayout(
                     )
                 },
                 actions = {
+                    if (menuContent != null) {
+                        menuContent()
+                    }
                     GkIconButton(
-                        GkIcons.Check,
+                        GkIcons.Save,
                         contentDescription = stringResource(Res.string.action_save),
                         enabled = saveEnabled,
                         onClick = onSave,

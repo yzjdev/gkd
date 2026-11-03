@@ -215,14 +215,12 @@ fun GkRuleGroupDialog(
                     },
                 )
             }
-            if (subs.isLocal) {
-                GkIconButton(
-                    imageVector = GkIcons.Edit,
-                    contentDescription = stringResource(Res.string.rule_edit),
-                    modifier = Modifier.size(48.dp),
-                    onClick = onClickEdit,
-                )
-            }
+            GkIconButton(
+                imageVector = GkIcons.Edit,
+                contentDescription = stringResource(Res.string.rule_edit),
+                modifier = Modifier.size(48.dp),
+                onClick = onClickEdit,
+            )
             Box {
                 GkIconButton(
                     imageVector = GkIcons.MoreVert,

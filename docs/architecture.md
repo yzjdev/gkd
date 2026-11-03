@@ -29,7 +29,7 @@
 
 Android/Desktop 采用单主界面设计，根 `MainViewModel` 由主界面的 ViewModelStore 持有，生命周期覆盖子页面。生产页面、私有 Composable 和子页面 ViewModel 通过 `MainViewModel.requireCurrent()` 访问已注册的根实例；根不持有子 ViewModel。页面 ViewModel 组织保存、确认和后续导航等事件流程，Compose 负责展示和 IME、焦点等界面操作。
 
-`GkAppNavigation` 是双端生产路由注册，`GkNavigation` 管理导航条目、框架保存状态及 ViewModel 生命周期。每次入栈由 `AppNavEntry` 区分，即使路由相同也不共享条目状态。HomeRoute 的 HomeViewModel 管理四标签状态与业务，子路由持有各自需要的 ViewModel；纯展示和组件瞬时状态不单独创建 ViewModel。
+`GkAppNavigation` 是双端生产路由注册，`GkNavigation` 管理导航条目、框架保存状态及 ViewModel 生命周期。每次入栈由 `AppNavEntry` 区分，即使路由相同也不共享条目状态。HomeRoute 的 HomeViewModel 管理五标签状态与业务，子路由持有各自需要的 ViewModel；纯展示和组件瞬时状态不单独创建 ViewModel。
 
 页面 ViewModel 持有查询聚合、Paging、加载状态与编辑草稿；状态随导航条目清理，不提供进程重启恢复。数据库首发以 `Loadable.Loading` 区分已加载的空结果。滚动、焦点和动画留在 Compose；状态归属与收集方式见 [开发规范](../AGENTS.md#ui-与生命周期)。
 

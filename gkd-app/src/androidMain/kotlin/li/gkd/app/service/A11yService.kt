@@ -70,6 +70,8 @@ abstract class A11yService : AccessibilityService(), AndroidAutomationSession {
 
                     override fun onSuccess(screenshot: ScreenshotResult) {
                         try {
+                            // 画面已被系统截取，立即恢复悬浮窗显示
+                            showOverlayContent()
                             if (cont.isActive) {
                                 cont.resume(
                                     Bitmap.wrapHardwareBuffer(

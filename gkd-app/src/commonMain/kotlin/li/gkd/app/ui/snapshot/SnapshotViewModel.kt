@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.withContext
 import li.gkd.app.logging.LogUtils
+import li.gkd.app.model.SnapshotNodeBounds
 import li.gkd.app.platform.PlatformResult
 import li.gkd.app.resources.*
 import li.gkd.app.snapshot.SnapshotStore
@@ -47,6 +48,23 @@ class SnapshotViewModel : BaseViewModel() {
 
     val shareProgress: StateFlow<SnapshotShareProgress?>
         field = MutableStateFlow(null)
+
+    val nodeBounds: StateFlow<Map<Long, List<SnapshotNodeBounds>>>
+        field = MutableStateFlow(emptyMap())
+
+    private val loadingBoundsIds = mutableSetOf<Long>()
+
+    fun loadNodeBounds(snapshotId: Long) {
+        if (nodeBounds.value.containsKey(snapshotId) || !loadingBoundsIds.add(snapshotId)) return
+        scope.launchUi {
+            try {
+                nodeBounds.value =
+                    nodeBounds.value + (snapshotId to SnapshotStore.readNodeBounds(snapshotId))
+            } finally {
+                loadingBoundsIds.remove(snapshotId)
+            }
+        }
+    }
 
     private var shareJob: Job? = null
 

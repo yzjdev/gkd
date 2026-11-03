@@ -1,6 +1,7 @@
 package li.gkd.app.ui.style
 
 import androidx.collection.LruCache
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.input.TransformedText
@@ -37,6 +38,10 @@ fun getJson5Transformation(dark: Boolean): VisualTransformation =
     } else {
         lightVisualTransformation
     }
+
+/** 规则文本高亮的平台入口，默认使用内置 JSON5 高亮，Android 端可替换为 SweetLine 实现。 */
+val LocalRuleTextHighlighter =
+    staticCompositionLocalOf<(Boolean) -> VisualTransformation> { ::getJson5Transformation }
 
 fun clearJson5TransformationCache() {
     darkVisualTransformation.cache.evictAll()

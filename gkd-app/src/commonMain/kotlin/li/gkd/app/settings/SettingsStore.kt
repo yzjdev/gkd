@@ -57,6 +57,7 @@ data class SettingsStore(
     @SerialName("a11yAppGroupType") val serviceScopeAppGroupType: Int = appGroupType,
     val subsExcludeAppGroupType: Int = appGroupType,
     val showDisabledRule: Boolean = true,
+    val editorWrapLines: Boolean = true,
     val snapshotDisplayMode: Int = SnapshotDisplayMode.ByTime.value,
 ) {
     val useA11y
