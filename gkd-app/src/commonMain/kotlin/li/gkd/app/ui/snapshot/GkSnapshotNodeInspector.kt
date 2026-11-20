@@ -22,7 +22,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
@@ -40,7 +39,6 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.layout.onSizeChanged
@@ -68,6 +66,7 @@ import li.gkd.app.state.Loadable
 import li.gkd.app.ui.component.GkDialog
 import li.gkd.app.ui.component.GkIcon
 import li.gkd.app.ui.component.GkIcons
+import li.gkd.app.ui.component.GkOutlinedTextField
 import li.gkd.app.ui.component.GkPageBottomSpaceDefaults
 import li.gkd.app.ui.component.GkSizedIconButton
 import li.gkd.app.ui.component.GkTooltipIconButtonBox
@@ -133,7 +132,6 @@ private fun mergeSnapshotOutline(nodes: List<NodeInfo>): List<SnapshotOutlineSeg
 
 @Composable
 fun GkSnapshotNodeOutline(tree: SnapshotNodeTree, selectedId: Int?, bounds: Rect) {
-    val highlight = MaterialTheme.colorScheme.primary
     val snapshot = tree.snapshot
     if (snapshot.screenWidth <= 0 || snapshot.screenHeight <= 0 || bounds.isEmpty) return
     val sx = bounds.width / snapshot.screenWidth
@@ -149,24 +147,11 @@ fun GkSnapshotNodeOutline(tree: SnapshotNodeTree, selectedId: Int?, bounds: Rect
             }
         }
     val selectedBounds = selectedId?.let(tree.nodes::get)?.attr?.takeIf { it.hasArea }
-    val center = selectedBounds?.let { attr ->
-        if (
-            attr.left >= 0 &&
-                attr.top >= 0 &&
-                attr.right <= snapshot.screenWidth &&
-                attr.bottom <= snapshot.screenHeight
-        ) {
-            Offset(
-                attr.left + (attr.right - attr.left) / 2f,
-                attr.top + (attr.bottom - attr.top) / 2f,
-            )
-        } else null
-    }
     Canvas(Modifier.fillMaxSize()) {
         val visibleImage = bounds.intersect(Rect(Offset.Zero, size))
         if (visibleImage.isEmpty) return@Canvas
         clipRect(visibleImage.left, visibleImage.top, visibleImage.right, visibleImage.bottom) {
-            drawPath(outline, Color.Cyan.copy(alpha = .35f), style = Stroke(width = 1.dp.toPx()))
+            drawPath(outline, Color.Red, style = Stroke(width = 1.dp.toPx()))
             selectedBounds?.let { a ->
                 val rect =
                     Rect(
@@ -176,114 +161,13 @@ fun GkSnapshotNodeOutline(tree: SnapshotNodeTree, selectedId: Int?, bounds: Rect
                         bounds.top + a.bottom * sy,
                     )
                 if (rect.overlaps(visibleImage)) {
-                    drawRect(highlight.copy(alpha = .16f), rect.topLeft, rect.size)
+                    drawRect(Color.Red.copy(alpha = .16f), rect.topLeft, rect.size)
                     drawRect(
-                        highlight,
+                        Color.Red,
                         rect.topLeft,
                         rect.size,
                         style = Stroke(width = 2.dp.toPx()),
                     )
-                }
-            }
-            if (center != null) {
-                val x = bounds.left + center.x * sx
-                val y = bounds.top + center.y * sy
-                val crosshair =
-                    Path().apply {
-                        moveTo(bounds.left, y)
-                        lineTo(bounds.right, y)
-                        moveTo(x, bounds.top)
-                        lineTo(x, bounds.bottom)
-                    }
-                val dash = PathEffect.dashPathEffect(floatArrayOf(8.dp.toPx(), 4.dp.toPx()))
-                drawPath(
-                    crosshair,
-                    Color.Black,
-                    style = Stroke(width = 3.dp.toPx(), pathEffect = dash),
-                )
-                drawPath(
-                    crosshair,
-                    Color.White,
-                    style = Stroke(width = 1.dp.toPx(), pathEffect = dash),
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun GkSnapshotOverlapDialog(
-    tree: SnapshotNodeTree,
-    candidates: List<Int>,
-    selectedId: Int?,
-    onSelect: (Int) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    GkDialog(onDismissRequest = onDismiss) {
-        Surface(shape = MaterialTheme.shapes.large) {
-            Column(Modifier.padding(horizontal = 8.dp).padding(bottom = 8.dp)) {
-                Row(
-                    Modifier.fillMaxWidth().padding(start = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        stringResource(
-                            Res.string.snapshot_node_overlap,
-                            candidates.size.toString(),
-                        ),
-                        modifier = Modifier.weight(1f),
-                        style = MaterialTheme.typography.titleSmall,
-                    )
-                    GkSizedIconButton(
-                        imageVector = GkIcons.Close,
-                        size = NodeDialogButtonSize,
-                        iconSize = NodeDialogIconSize,
-                        contentDescription = stringResource(Res.string.action_close),
-                        onClick = onDismiss,
-                    )
-                }
-                LazyColumn(
-                    Modifier.fillMaxWidth().heightIn(max = 360.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    items(candidates, key = { it }) { id ->
-                        val node = tree.nodes.getValue(id)
-                        val attr = node.attr
-                        val selected = id == selectedId
-                        Column(
-                            Modifier.fillMaxWidth()
-                                .clip(MaterialTheme.shapes.small)
-                                .background(
-                                    if (selected) MaterialTheme.colorScheme.secondaryContainer
-                                    else MaterialTheme.colorScheme.surfaceContainerHigh,
-                                )
-                                .selectable(selected = selected, onClick = { onSelect(id) })
-                                .padding(horizontal = 8.dp, vertical = 4.dp),
-                        ) {
-                            ProvideTextStyle(MaterialTheme.typography.bodySmall) {
-                                Row(Modifier.fillMaxWidth()) {
-                                    SnapshotNodeRowLabel(
-                                        node,
-                                        selected,
-                                        showNodeId = false,
-                                    )
-                                }
-                            }
-                            Text(
-                                stringResource(
-                                    Res.string.snapshot_node_overlap_details,
-                                    node.id.toString(),
-                                    "[${attr.left}, ${attr.top}, ${attr.right}, ${attr.bottom}]",
-                                ),
-                                style = MaterialTheme.typography.bodySmall,
-                                fontSize = 11.sp,
-                                lineHeight = 14.sp,
-                                color =
-                                    if (selected) MaterialTheme.colorScheme.onSecondaryContainer
-                                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
                 }
             }
         }
@@ -424,6 +308,7 @@ private class SnapshotNodeTreeState(tree: SnapshotNodeTree) {
     var rows by mutableStateOf<List<SnapshotNodeRow>>(emptyList())
     var contentWidthPx by mutableIntStateOf(0)
     var locateTarget by mutableStateOf<Int?>(null)
+    var query by mutableStateOf("")
 }
 
 @Composable
@@ -443,8 +328,12 @@ private fun rememberSnapshotNodeTreeState(
         state.locateTarget = id
     }
     val expanded = state.expanded
-    LaunchedEffect(tree, expanded) {
-        val rows = withContext(Dispatchers.Default) { tree.visibleRows(expanded) }
+    val query = state.query
+    LaunchedEffect(tree, expanded, query) {
+        val rows =
+            withContext(Dispatchers.Default) {
+                if (query.isBlank()) tree.visibleRows(expanded) else tree.searchRows(query)
+            }
         if (rows.size < state.rows.size) state.contentWidthPx = 0
         state.rows = rows
     }
@@ -481,10 +370,20 @@ private fun ColumnScope.NodeTreeContent(
     val rows = state.rows
     val horizontalState = state.horizontalState
     val showPropertiesLabel = stringResource(Res.string.snapshot_node_properties)
+    if (tree.nodes.isNotEmpty()) {
+        SnapshotNodeSearchField(
+            query = state.query,
+            onQueryChange = { state.query = it },
+        )
+    }
     if (rows.isEmpty()) {
-        if (tree.nodes.isEmpty()) {
-            Text(stringResource(Res.string.snapshot_node_empty), Modifier.padding(8.dp))
-        }
+        Text(
+            stringResource(
+                if (tree.nodes.isEmpty()) Res.string.snapshot_node_empty
+                else Res.string.search_no_results
+            ),
+            Modifier.padding(8.dp),
+        )
         return
     }
     val selectionMarkerColor = MaterialTheme.colorScheme.primary
@@ -623,6 +522,39 @@ private fun ColumnScope.NodeTreeContent(
             gkPageBottomSpace(height = GkPageBottomSpaceDefaults.CompactHeight)
         }
     }
+}
+
+@Composable
+private fun SnapshotNodeSearchField(
+    query: String,
+    onQueryChange: (String) -> Unit,
+) {
+    val clearIcon: (@Composable () -> Unit)? =
+        if (query.isEmpty()) {
+            null
+        } else {
+            {
+                GkSizedIconButton(
+                    size = NodeDialogButtonSize,
+                    iconSize = NodeDialogIconSize,
+                    imageVector = GkIcons.Close,
+                    contentDescription = stringResource(Res.string.search_clear),
+                    onClick = { onQueryChange("") },
+                )
+            }
+        }
+    GkOutlinedTextField(
+        value = query,
+        onValueChange = onQueryChange,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+        placeholder = { Text(stringResource(Res.string.snapshot_node_search)) },
+        leadingIcon = {
+            GkIcon(GkIcons.Search, modifier = Modifier.size(18.dp), contentDescription = null)
+        },
+        trailingIcon = clearIcon,
+        singleLine = true,
+        textStyle = MaterialTheme.typography.bodySmall,
+    )
 }
 
 @Composable

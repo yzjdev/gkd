@@ -68,6 +68,22 @@ class SnapshotNodeTree(val snapshot: ComplexSnapshot) {
         }
     }
 
+    /** Case-insensitive match over id/vid/name/text/desc; blank queries match nothing. */
+    fun searchRows(query: String): List<SnapshotNodeRow> {
+        val keyword = query.trim()
+        if (keyword.isEmpty()) return emptyList()
+        return snapshot.nodes
+            .filter { matches(it, keyword) }
+            .map { SnapshotNodeRow(it.id, 0) }
+    }
+
+    private fun matches(node: NodeInfo, keyword: String): Boolean {
+        val attr = node.attr
+        return node.id.toString().contains(keyword, ignoreCase = true) ||
+            listOfNotNull(attr.id, attr.vid, attr.name, attr.text, attr.desc)
+                .any { it.contains(keyword, ignoreCase = true) }
+    }
+
     fun hit(x: Float, y: Float): List<Int> {
         val hits =
             snapshot.nodes.filter { n ->

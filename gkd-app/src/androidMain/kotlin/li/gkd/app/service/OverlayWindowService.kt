@@ -4,6 +4,7 @@ import android.animation.ValueAnimator
 import android.annotation.SuppressLint
 import android.content.res.Configuration
 import android.graphics.PixelFormat
+import android.view.GestureDetector
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.ViewConfiguration
@@ -36,7 +37,6 @@ import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import kotlin.coroutines.resume
 import kotlin.math.abs
 import kotlin.time.Duration.Companion.milliseconds
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
@@ -109,6 +109,7 @@ private class ShareContext {
 
 abstract class OverlayWindowService(
     private val positionKey: String,
+    private val accessibilityOverlay: Boolean = false,
 ) : LifecycleHookService(), SavedStateRegistryOwner {
 
     companion object {
@@ -116,6 +117,20 @@ abstract class OverlayWindowService(
         val isAnyAlive: Boolean
             get() = aliveSize > 0
     }
+
+    // TYPE_ACCESSIBILITY_OVERLAY 只能由无障碍服务的 WindowManager 添加；
+    // 无障碍服务未连接时退回应用悬浮窗，避免悬浮窗直接缺失
+    private val accessibilityWindowManager =
+        if (accessibilityOverlay) A11yService.instance?.wm else null
+
+    private val windowManager = accessibilityWindowManager ?: app.windowManager
+
+    private val windowType =
+        if (accessibilityWindowManager != null) {
+            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY
+        } else {
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+        }
 
     private val resizeFlow = MutableSharedFlow<Unit>()
 
@@ -219,27 +234,49 @@ abstract class OverlayWindowService(
 
     protected suspend fun <T> withAllOverlaysHidden(block: suspend () -> T): T {
         shareContext.overlayContentHidden = true
+        setWindowVisible(false)
         return try {
             awaitOverlayContentHidden()
             block()
         } finally {
-            shareContext.overlayContentHidden = false
+            showOverlayContent()
         }
     }
 
-    private suspend fun awaitOverlayContentHidden() = suspendCancellableCoroutine { continuation ->
-        val afterFrame = Runnable {
-            if (continuation.isActive) continuation.resume(Unit)
-        }
-        val onFrame = Runnable {
-            if (continuation.isActive) view.post(afterFrame)
-        }
-        continuation.invokeOnCancellation {
-            view.removeCallbacks(onFrame)
-            view.removeCallbacks(afterFrame)
-        }
-        view.postOnAnimation(onFrame)
+    protected fun showOverlayContent() {
+        shareContext.overlayContentHidden = false
+        setWindowVisible(true)
     }
+
+    // 只跳过 Compose 绘制会把上一帧内容留在窗口 Surface 上，截图仍会带上悬浮窗；
+    // 这里同时把视图和窗口 alpha 置零，让 Surface 重绘为透明
+    private fun setWindowVisible(visible: Boolean) {
+        val alpha = if (visible) 1f else 0f
+        view.alpha = alpha
+        val params = attachedLayoutParams ?: return
+        params.alpha = alpha
+        windowManager.updateViewLayout(view, params)
+    }
+
+    private suspend fun awaitOverlayContentHidden() =
+        suspendCancellableCoroutine { continuation ->
+            val step =
+                object : Runnable {
+                    private var remaining = 2
+
+                    override fun run() {
+                        if (!continuation.isActive) return
+                        remaining--
+                        if (remaining > 0) {
+                            view.postOnAnimation(this)
+                        } else {
+                            continuation.resume(Unit)
+                        }
+                    }
+                }
+            continuation.invokeOnCancellation { view.removeCallbacks(step) }
+            view.postOnAnimation(step)
+        }
 
     private val minMargin
         get() = 10.dp.px.toInt()
@@ -248,6 +285,8 @@ abstract class OverlayWindowService(
         get() = listOf(minMargin, BarUtils.getStatusHeight())
 
     private lateinit var shareContext: ShareContext
+
+    private var attachedLayoutParams: WindowManager.LayoutParams? = null
 
     private val positionFlow by lazy {
         MutableStateFlow(
@@ -271,7 +310,7 @@ abstract class OverlayWindowService(
             onDestroyed { ThreadUtils.runMainOrPost(1000) { aliveSize-- } }
             onDestroyed { savePosition() }
             attachView()
-            onDestroyed { app.windowManager.removeView(view) }
+            onDestroyed { windowManager.removeView(view) }
         }
     }
 
@@ -287,7 +326,7 @@ abstract class OverlayWindowService(
             WindowManager.LayoutParams(
                     WindowManager.LayoutParams.WRAP_CONTENT,
                     WindowManager.LayoutParams.WRAP_CONTENT,
-                    WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                    windowType,
                     WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                         WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
                         WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
@@ -324,7 +363,7 @@ abstract class OverlayWindowService(
                             val fraction = animator.animatedValue as Float
                             layoutParams.x = (startX + (x - startX) * fraction).toInt()
                             layoutParams.y = (startY + (y - startY) * fraction).toInt()
-                            app.windowManager.updateViewLayout(view, layoutParams)
+                            windowManager.updateViewLayout(view, layoutParams)
                         }
                         doOnEnd {
                             positionAnimator = null
@@ -339,31 +378,41 @@ abstract class OverlayWindowService(
             resizeFlow.debounce(100.milliseconds).collect { fixLimitXy() }
         }
         var downXy: Pair<Float, Float>? = null
-        var longClickJob: Job? = null
         var viewClickEnabled = false
         var isDragging = false
         val touchSlop = ViewConfiguration.get(this).scaledTouchSlop
-        @SuppressLint("ClickableViewAccessibility")
-        view.setOnTouchListener { _, event ->
-            when (event.action) {
-                MotionEvent.ACTION_DOWN -> {
-                    positionAnimator?.cancel()
-                    downXy = event.rawX to event.rawY
-                    screenSize = ScreenUtils.getSize()
-                    paramsXy = layoutParams.x to layoutParams.y
-                    viewClickEnabled = isViewClickEnabled()
-                    isDragging = false
-                    longClickJob = null
-                    longClickJob = lifecycleScope.launch {
-                        delay(500.milliseconds)
-                        longClickJob = null
-                        if (downXy != null) {
+        val gestureDetector =
+            GestureDetector(
+                this,
+                object : GestureDetector.SimpleOnGestureListener() {
+                    override fun onDown(e: MotionEvent): Boolean {
+                        positionAnimator?.cancel()
+                        downXy = e.rawX to e.rawY
+                        screenSize = ScreenUtils.getSize()
+                        paramsXy = layoutParams.x to layoutParams.y
+                        viewClickEnabled = isViewClickEnabled()
+                        isDragging = false
+                        return true
+                    }
+
+                    override fun onSingleTapUp(e: MotionEvent): Boolean {
+                        if (viewClickEnabled && !isDragging) {
+                            onClickView()
+                        }
+                        return true
+                    }
+
+                    override fun onLongPress(e: MotionEvent) {
+                        if (!isDragging) {
                             onLongClickView()
                         }
                     }
-                    true
-                }
-
+                },
+            )
+        @SuppressLint("ClickableViewAccessibility")
+        view.setOnTouchListener { _, event ->
+            gestureDetector.onTouchEvent(event)
+            when (event.action) {
                 MotionEvent.ACTION_MOVE -> {
                     downXy?.let { downEvent ->
                         val dx = (event.rawX - downEvent.first).toInt()
@@ -371,52 +420,33 @@ abstract class OverlayWindowService(
                         if (abs(dx) > touchSlop || abs(dy) > touchSlop) {
                             isDragging = true
                         }
-                        val x = dx + paramsXy.first
-                        val y = dy + paramsXy.second
-                        layoutParams.x =
-                            x.coerceIn(marginX, screenSize.width - view.width - marginX)
-                        layoutParams.y =
-                            y.coerceIn(
-                                marginY,
-                                screenSize.height - view.height - marginY,
-                            )
-                        positionFlow.value = listOf(layoutParams.x, layoutParams.y)
-                        app.windowManager.updateViewLayout(view, layoutParams)
                         if (isDragging) {
-                            longClickJob?.cancel()
-                            longClickJob = null
+                            val x = dx + paramsXy.first
+                            val y = dy + paramsXy.second
+                            layoutParams.x =
+                                x.coerceIn(marginX, screenSize.width - view.width - marginX)
+                            layoutParams.y =
+                                y.coerceIn(
+                                    marginY,
+                                    screenSize.height - view.height - marginY,
+                                )
+                            positionFlow.value = listOf(layoutParams.x, layoutParams.y)
+                            windowManager.updateViewLayout(view, layoutParams)
                         }
                     }
                     true
                 }
 
-                MotionEvent.ACTION_UP -> {
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                     savePosition()
-                    val gapTime = event.eventTime - event.downTime
-                    if (
-                        viewClickEnabled &&
-                            !isDragging &&
-                            gapTime <= ViewConfiguration.getTapTimeout()
-                    ) {
-                        onClickView()
-                    }
                     downXy = null
-                    longClickJob?.cancel()
-                    longClickJob = null
                     true
                 }
 
-                MotionEvent.ACTION_CANCEL -> {
-                    savePosition()
-                    downXy = null
-                    longClickJob?.cancel()
-                    longClickJob = null
-                    true
-                }
-
-                else -> false
+                else -> true
             }
         }
-        app.windowManager.addView(view, layoutParams)
+        attachedLayoutParams = layoutParams
+        windowManager.addView(view, layoutParams)
     }
 }

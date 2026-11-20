@@ -199,7 +199,8 @@ compose.desktop.application {
 
 tasks
     .withType<JavaExec>()
-    .matching { it.name == "run" || it.name == "runRelease" }
+    // `hotRun*` are registered by Compose Hot Reload when the IDE launches the Desktop host.
+    .matching { it.name == "run" || it.name == "runRelease" || it.name.startsWith("hotRun") }
     .configureEach {
         systemProperty("gkd.projectRoot", rootProject.projectDir.absolutePath)
         // Match Gradle's UTF-8 decoder instead of the Windows native output encoding.

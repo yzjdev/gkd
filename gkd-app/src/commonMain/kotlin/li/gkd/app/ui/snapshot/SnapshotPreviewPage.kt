@@ -31,6 +31,8 @@ import li.gkd.app.app.AppInfoRepository
 import li.gkd.app.resources.*
 import li.gkd.app.state.Loadable
 import li.gkd.app.ui.MainViewModel
+import li.gkd.app.ui.ai.GkAiRuleGeneratingDialog
+import li.gkd.app.ui.ai.GkAiRuleResultDialog
 import li.gkd.app.ui.component.GkAppNameText
 import li.gkd.app.ui.component.GkIconButton
 import li.gkd.app.ui.component.GkIcons
@@ -46,6 +48,7 @@ import li.gkd.app.ui.page.GkImagePreviewContent
 import li.gkd.app.ui.platform.GkBackHandler
 import li.gkd.app.ui.platform.GkSystemBars
 import li.gkd.app.ui.platform.LocalUiHost
+import org.jetbrains.compose.resources.getString
 import org.jetbrains.compose.resources.stringResource
 
 @Composable
@@ -60,12 +63,33 @@ fun SnapshotPreviewPage(
     val inspection = viewModel { SnapshotPreviewViewModel() }
     val nodeState by inspection.tree.collectAsStateWithLifecycle()
     val selection by inspection.selection.collectAsStateWithLifecycle()
-    val (selectedNode, candidates) = selection
+    val selectedNode = selection.id
     val shareProgress by vm.shareProgress.collectAsStateWithLifecycle()
-
+    val ruleStream by inspection.ruleStream.collectAsStateWithLifecycle()
+    val ruleResult by inspection.ruleResult.collectAsStateWithLifecycle()
+    val streamingRule = ruleStream
+    if (streamingRule != null) {
+        GkAiRuleGeneratingDialog(
+            text = streamingRule,
+            onCancel = inspection::cancelRuleGeneration,
+        )
+    }
     val loadableState by vm.uiState.collectAsStateWithLifecycle()
     val state = loadableState.value
     val catalog by AppInfoRepository.state.collectAsStateWithLifecycle()
+    ruleResult?.let { result ->
+        val resultAppId = nodeState.value?.snapshot?.appId
+        GkAiRuleResultDialog(
+            result = result,
+            onAdd = {
+                inspection.addRuleResult(
+                    resultAppId?.let { catalog.snapshot?.apps?.get(it)?.name }
+                )
+            },
+            onDismiss = inspection::consumeRuleResult,
+        )
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         key(route) {
             val actionRequest by vm.actionRequest.collectAsStateWithLifecycle()
@@ -84,7 +108,7 @@ fun SnapshotPreviewPage(
                 val currentImageUri = currentSnapshot.image().path
                 var inspecting by remember { mutableStateOf(false) }
                 var inspectionSession by remember { mutableIntStateOf(0) }
-                var treeVisible by remember { mutableStateOf(true) }
+                var treeVisible by remember { mutableStateOf(false) }
                 var locateRequest by remember {
                     mutableStateOf<SnapshotNodeLocateRequest?>(null)
                 }
@@ -199,7 +223,7 @@ fun SnapshotPreviewPage(
                                     vm.actionRequest.value?.let(vm::dismissActions)
                                     inspectionSession++
                                     inspecting = true
-                                    treeVisible = true
+                                    treeVisible = false
                                 },
                             )
                             GkIconButton(
@@ -243,18 +267,6 @@ fun SnapshotPreviewPage(
                             },
                             onShowValue = mainVm.textDialog::showText,
                             onDismiss = { propertiesVisible = false },
-                        )
-                    }
-                    if (candidates.isNotEmpty()) {
-                        GkSnapshotOverlapDialog(
-                            currentTree,
-                            candidates,
-                            selectedId = selectedForSnapshot?.id,
-                            onSelect = {
-                                inspection.select(it)
-                                revealSelectedNode(it)
-                            },
-                            onDismiss = inspection::dismissCandidates,
                         )
                     }
                 }
@@ -325,6 +337,7 @@ fun SnapshotPreviewPage(
                             onSaveToAlbum = { actions.saveToAlbum(snapshot) },
                             onReplace = { actions.replace(snapshot) },
                             onDelete = { actions.delete(snapshot) },
+                            onGenerateRule = { inspection.generateRule("") },
                         )
                     }
                 }

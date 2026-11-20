@@ -26,6 +26,8 @@ import li.gkd.app.ui.navigation.ActionLogRoute
 import li.gkd.app.ui.navigation.ActionToastRoute
 import li.gkd.app.ui.navigation.ActivityLogRoute
 import li.gkd.app.ui.navigation.AdvancedPageRoute
+import li.gkd.app.ui.navigation.AiChatRoute
+import li.gkd.app.ui.navigation.AiSettingsRoute
 import li.gkd.app.ui.navigation.AppConfigRoute
 import li.gkd.app.ui.navigation.AppRoute
 import li.gkd.app.ui.navigation.BlockA11yAppListRoute
@@ -256,6 +258,7 @@ class DesktopState(
                 BottomNavItem.Dashboard.key to "dashboard",
                 BottomNavItem.SubsManage.key to "subscriptions",
                 BottomNavItem.AppList.key to "apps",
+                BottomNavItem.Snapshot.key to "snapshot",
                 BottomNavItem.Settings.key to "settings",
             )
         }
@@ -275,6 +278,8 @@ private val desktopRoutes by lazy {
         "block-a11y-setup" to BlockA11ySetupRoute,
         "work-mode" to WorkModeRoute,
         "snapshot-settings" to SnapshotSettingsRoute,
+        "ai-settings" to AiSettingsRoute,
+        "ai-chat" to AiChatRoute(emptyList()),
         "advanced" to AdvancedPageRoute,
         "debug-settings" to DebugSettingsRoute,
         "keep-alive" to KeepAliveRoute,

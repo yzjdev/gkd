@@ -31,6 +31,7 @@ import li.gkd.app.ui.component.rememberColumnScrollState
 import li.gkd.app.ui.navigation.AboutRoute
 import li.gkd.app.ui.navigation.ActionToastRoute
 import li.gkd.app.ui.navigation.AdvancedPageRoute
+import li.gkd.app.ui.navigation.AiSettingsRoute
 import li.gkd.app.ui.navigation.BlockA11yAppListRoute
 import li.gkd.app.ui.navigation.BlockA11ySetupRoute
 import li.gkd.app.ui.navigation.InterfaceSettingsRoute
@@ -227,6 +228,10 @@ fun settingsPage(
                 GkSettingItem(
                     title = stringResource(Res.string.settings_interface),
                     onClick = { mainVm.navigator.navigate(InterfaceSettingsRoute) },
+                )
+                GkSettingItem(
+                    title = stringResource(Res.string.ai_title),
+                    onClick = { mainVm.navigator.navigate(AiSettingsRoute) },
                 )
                 GkSettingItem(
                     title = stringResource(Res.string.backup_restore),

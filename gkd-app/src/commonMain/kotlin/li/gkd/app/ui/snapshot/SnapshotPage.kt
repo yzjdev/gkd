@@ -95,12 +95,19 @@ import li.gkd.app.ui.component.GkPageBottomSpace
 import li.gkd.app.ui.component.GkRetainedSheet
 import li.gkd.app.ui.component.GkScaffold
 import li.gkd.app.ui.component.gkTopAppBarScroll
+import li.gkd.app.ui.home.BottomNavItem
+import li.gkd.app.ui.home.HomeState
+import li.gkd.app.ui.home.ResetPageScrollOnRequest
+import li.gkd.app.ui.home.ScaffoldExt
 import li.gkd.app.ui.image.appImageLoader
+import li.gkd.app.ui.navigation.AiChatRoute
 import li.gkd.app.ui.navigation.SnapshotPreviewRoute
 import li.gkd.app.ui.platform.GkBackHandler
 import li.gkd.app.ui.platform.LocalUiHost
 import li.gkd.app.ui.share.ListPlaceholder
 import li.gkd.app.ui.share.launchUi
+import li.gkd.app.ui.settings.setSnapshotButtonEnabled
+import li.gkd.app.ui.settings.snapshotButtonRunning
 import li.gkd.app.ui.style.scaffoldPadding
 import li.gkd.app.ui.upload.createSnapshotUploadItem
 import li.gkd.app.util.ToastUtils
@@ -110,6 +117,26 @@ import org.jetbrains.compose.resources.stringResource
 
 @Composable
 fun SnapshotPage() {
+    val mainVm = MainViewModel.requireCurrent()
+    val page = snapshotScaffold(onNavigateBack = mainVm.navigator::pop, homeState = null)
+    GkScaffold(
+        modifier = page.modifier,
+        topBar = page.topBar,
+        snackbarHost = page.snackbarHost,
+        content = page.content,
+    )
+}
+
+/** The Home snapshot tab and the standalone route render the same list. */
+@Composable
+fun snapshotPage(homeState: HomeState): ScaffoldExt =
+    snapshotScaffold(onNavigateBack = null, homeState = homeState)
+
+@Composable
+private fun snapshotScaffold(
+    onNavigateBack: (() -> Unit)?,
+    homeState: HomeState?,
+): ScaffoldExt {
     val host = LocalUiHost.current
     val mainVm = MainViewModel.requireCurrent()
     val imageLoader = appImageLoader()
@@ -125,6 +152,8 @@ fun SnapshotPage() {
 
     val loadableState by vm.uiState.collectAsStateWithLifecycle()
     val settings by SettingsRepository.settings.collectAsStateWithLifecycle()
+    val buttonRunning = snapshotButtonRunning()
+    val aiEnabled = settings.enableAi
     val displayMode = SnapshotDisplayMode.entries.findOption(settings.snapshotDisplayMode)
     val actionScope = vm.scope
     val firstLoading = loadableState is Loadable.Loading
@@ -216,13 +245,17 @@ fun SnapshotPage() {
     val gridState = rememberLazyGridState()
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
     val uiScope = rememberCoroutineScope()
+    suspend fun resetScrollNow() {
+        scrollBehavior.state.heightOffset = 0f
+        scrollBehavior.state.contentOffset = 0f
+        gridState.scrollToItem(0)
+    }
     val resetScroll = {
-        uiScope.launch {
-            scrollBehavior.state.heightOffset = 0f
-            scrollBehavior.state.contentOffset = 0f
-            gridState.scrollToItem(0)
-        }
+        uiScope.launch { resetScrollNow() }
         Unit
+    }
+    if (homeState != null) {
+        ResetPageScrollOnRequest(homeState, BottomNavItem.Snapshot) { resetScrollNow() }
     }
     var wasEmpty by remember { mutableStateOf(groups.isEmpty()) }
     SideEffect {
@@ -239,7 +272,8 @@ fun SnapshotPage() {
     }
     GkBackHandler(selectionSnapshot.active) { selectionState.clear() }
 
-    GkScaffold(
+    val scaffold = ScaffoldExt(
+        navItem = BottomNavItem.Snapshot,
         modifier = Modifier.gkTopAppBarScroll(scrollBehavior),
         snackbarHost = {
             shareProgress?.let {
@@ -251,10 +285,17 @@ fun SnapshotPage() {
                 selectedMode = selectionSnapshot.active,
                 selectedCount = selectedIds.size,
                 onExitSelection = selectionState::clear,
-                onNavigateBack = mainVm.navigator::pop,
+                onNavigateBack = onNavigateBack,
                 onTitleClick = resetScroll,
                 scrollBehavior = scrollBehavior,
-                title = { Text(stringResource(Res.string.snapshot_records)) },
+                title = {
+                    Text(
+                        stringResource(
+                            if (onNavigateBack == null) Res.string.snapshot_title
+                            else Res.string.snapshot_records
+                        )
+                    )
+                },
                 actions = { selectedMode ->
                     if (selectedMode) {
                         GkMultiSelectionActions(
@@ -264,6 +305,16 @@ fun SnapshotPage() {
                             onInvert = selectionState::invert,
                             enabled = loadableState is Loadable.Ready,
                         ) { dismiss ->
+                            GkBatchActionMenuItem(
+                                text = stringResource(Res.string.ai_chat),
+                                enabled = selectedSnapshots.isNotEmpty() && aiEnabled,
+                                onDismiss = dismiss,
+                                onClick = {
+                                    mainVm.navigator.navigate(
+                                        AiChatRoute(selectedSnapshots.map { it.id })
+                                    )
+                                },
+                            )
                             GkBatchActionMenuItem(
                                 text = stringResource(Res.string.snapshot_share),
                                 enabled = selectedSnapshots.isNotEmpty() && shareProgress == null,
@@ -427,6 +478,17 @@ fun SnapshotPage() {
                                 SnapshotDisplayMode.switch(settings.snapshotDisplayMode),
                             )
                         GkIconButton(
+                            imageVector = GkIcons.TileButton,
+                            contentDescription = stringResource(Res.string.snapshot_button_label),
+                            colors =
+                                IconButtonDefaults.iconButtonColors(
+                                    contentColor =
+                                        if (buttonRunning) MaterialTheme.colorScheme.primary
+                                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                                ),
+                            onClick = { host.setSnapshotButtonEnabled(!buttonRunning) },
+                        )
+                        GkIconButton(
                             imageVector =
                                 when (displayMode) {
                                     SnapshotDisplayMode.ByTime -> GkIcons.CalendarMonth
@@ -455,84 +517,86 @@ fun SnapshotPage() {
                 },
             )
         },
-    ) { contentPadding ->
-        LazyVerticalGrid(
-            columns = GridCells.Adaptive(minSize = 160.dp),
-            modifier = Modifier.fillMaxSize().scaffoldPadding(contentPadding),
-            state = gridState,
-            contentPadding = PaddingValues(start = 12.dp, top = 0.dp, end = 12.dp, bottom = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            groups.forEach { group ->
-                stickyHeader(key = group.key) {
-                    val groupIds =
-                        remember(group) {
-                            group.snapshots.mapTo(mutableSetOf()) { it.id }
-                        }
-                    val selectedCount = groupIds.count { it in selectedIds }
-                    val groupSelectionState =
-                        when (selectedCount) {
-                            0 -> ToggleableState.Off
-                            groupIds.size -> ToggleableState.On
-                            else -> ToggleableState.Indeterminate
-                        }
-                    SnapshotGroupHeader(
-                        title = group.title,
-                        appId = group.appId,
-                        selectedMode = selectionSnapshot.active,
-                        groupSelectionState = groupSelectionState,
-                        onToggleSelection = {
-                            if (groupSelectionState == ToggleableState.On) {
-                                selectionState.deselectMany(groupIds)
-                            } else {
-                                selectionState.selectMany(groupIds)
+        content = { contentPadding ->
+            LazyVerticalGrid(
+                columns = GridCells.Adaptive(minSize = 160.dp),
+                modifier = Modifier.fillMaxSize().scaffoldPadding(contentPadding),
+                state = gridState,
+                contentPadding =
+                    PaddingValues(start = 12.dp, top = 0.dp, end = 12.dp, bottom = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                groups.forEach { group ->
+                    stickyHeader(key = group.key) {
+                        val groupIds =
+                            remember(group) {
+                                group.snapshots.mapTo(mutableSetOf()) { it.id }
                             }
-                        },
-                    )
-                }
-                items(group.snapshots, key = { it.id }) { snapshot ->
-                    SnapshotCard(
-                        imageLoader,
-                        snapshot = snapshot,
-                        appName = appNames[snapshot.appId] ?: snapshot.appId,
-                        showAppName = displayMode != SnapshotDisplayMode.ByApp,
-                        thumbnailVersion = thumbnailVersions[snapshot.id] ?: 0,
-                        selectedMode = selectionSnapshot.active,
-                        selected = snapshot.id in selectedIds,
-                        onClick = {
-                            if (selectionSnapshot.active) {
-                                selectionState.toggle(snapshot.id)
-                            } else {
-                                openPreview(snapshot.id)
+                        val selectedCount = groupIds.count { it in selectedIds }
+                        val groupSelectionState =
+                            when (selectedCount) {
+                                0 -> ToggleableState.Off
+                                groupIds.size -> ToggleableState.On
+                                else -> ToggleableState.Indeterminate
                             }
-                        },
-                        onLongClick = { selectionState.select(snapshot.id) },
-                        onMore = { vm.showActions(snapshot.id) },
-                    )
+                        SnapshotGroupHeader(
+                            title = group.title,
+                            appId = group.appId,
+                            selectedMode = selectionSnapshot.active,
+                            groupSelectionState = groupSelectionState,
+                            onToggleSelection = {
+                                if (groupSelectionState == ToggleableState.On) {
+                                    selectionState.deselectMany(groupIds)
+                                } else {
+                                    selectionState.selectMany(groupIds)
+                                }
+                            },
+                        )
+                    }
+                    items(group.snapshots, key = { it.id }) { snapshot ->
+                        SnapshotCard(
+                            imageLoader,
+                            snapshot = snapshot,
+                            appName = appNames[snapshot.appId] ?: snapshot.appId,
+                            showAppName = displayMode != SnapshotDisplayMode.ByApp,
+                            thumbnailVersion = thumbnailVersions[snapshot.id] ?: 0,
+                            selectedMode = selectionSnapshot.active,
+                            selected = snapshot.id in selectedIds,
+                            onClick = {
+                                if (selectionSnapshot.active) {
+                                    selectionState.toggle(snapshot.id)
+                                } else {
+                                    openPreview(snapshot.id)
+                                }
+                            },
+                            onLongClick = { selectionState.select(snapshot.id) },
+                            onMore = { vm.showActions(snapshot.id) },
+                        )
+                    }
                 }
-            }
-            if (!firstLoading) {
-                item(key = ListPlaceholder.KEY, span = { GridItemSpan(maxLineSpan) }) {
-                    Column {
-                        if (groups.isEmpty()) {
-                            GkEmptyState(
-                                text =
-                                    when {
-                                        loadError != null ->
-                                            loadError.message
-                                                ?: stringResource(Res.string.data_load_failed)
+                if (!firstLoading) {
+                    item(key = ListPlaceholder.KEY, span = { GridItemSpan(maxLineSpan) }) {
+                        Column {
+                            if (groups.isEmpty()) {
+                                GkEmptyState(
+                                    text =
+                                        when {
+                                            loadError != null ->
+                                                loadError.message
+                                                    ?: stringResource(Res.string.data_load_failed)
 
-                                        else -> stringResource(Res.string.data_empty)
-                                    },
-                            )
+                                            else -> stringResource(Res.string.data_empty)
+                                        },
+                                )
+                            }
+                            GkPageBottomSpace()
                         }
-                        GkPageBottomSpace()
                     }
                 }
             }
-        }
-    }
+        },
+    )
 
     GkRetainedSheet(
         request = actionRequest,
@@ -566,6 +630,7 @@ fun SnapshotPage() {
             onDelete = { actions.delete(snapshot) },
         )
     }
+    return scaffold
 }
 
 @Composable

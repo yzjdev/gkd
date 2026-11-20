@@ -6,6 +6,8 @@ import li.gkd.app.ui.ImagePreviewPage
 import li.gkd.app.ui.MainViewModel
 import li.gkd.app.ui.PrivilegeServicePage
 import li.gkd.app.ui.WebViewPage
+import li.gkd.app.ui.ai.AiChatPage
+import li.gkd.app.ui.ai.AiSettingsPage
 import li.gkd.app.ui.crash.CrashReportPage
 import li.gkd.app.ui.home.ActionToastPage
 import li.gkd.app.ui.home.BlockA11ySetupPage
@@ -65,6 +67,7 @@ fun GkAppNavigation() {
                 is UpsertRuleGroupRoute -> UpsertRuleGroupPage(route)
                 is CategoryEditorRoute -> CategoryEditorPage(route)
                 is SnapshotPreviewRoute -> SnapshotPreviewPage(route)
+                is AiChatRoute -> AiChatPage(route)
                 is WebViewRoute -> WebViewPage(route)
                 is ImagePreviewRoute -> ImagePreviewPage(route)
 
@@ -90,6 +93,7 @@ fun GkAppNavigation() {
                 QuickSettingsTilesRoute -> QuickSettingsTilesPage()
                 PrivilegeServiceRoute -> PrivilegeServicePage()
                 SnapshotSettingsRoute -> SnapshotSettingsPage(entry)
+                AiSettingsRoute -> AiSettingsPage()
                 CrashReportRoute -> CrashReportPage()
             }
         }

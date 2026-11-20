@@ -109,6 +109,15 @@ data class SnapshotPreviewRoute(
 
 @Serializable data object SnapshotSettingsRoute : AppRoute
 
+@Serializable data object AiSettingsRoute : AppRoute
+
+/** Chat about the snapshots selected on the list page. */
+@Serializable
+data class AiChatRoute(val snapshotIds: List<Long>) : AppRoute {
+    override val transition
+        get() = RouteTransition.Editor
+}
+
 @Serializable
 data class CategoryEditorRoute(val subsId: Long, val categoryKey: Int? = null) : AppRoute {
     override val transition

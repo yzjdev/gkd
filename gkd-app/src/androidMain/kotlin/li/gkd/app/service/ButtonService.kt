@@ -22,12 +22,13 @@ import li.gkd.app.util.IntentUtils
 class ButtonService :
     OverlayWindowService(
         positionKey = "button",
+        accessibilityOverlay = true,
     ) {
     override fun onClickView() {
         if (isOverlayContentHidden) return
         lifecycleScope.launchUi {
             withAllOverlaysHidden {
-                SnapshotCaptureHost.capture()
+                SnapshotCaptureHost.capture(onScreenshotCaptured = ::showOverlayContent)
             }
         }
     }

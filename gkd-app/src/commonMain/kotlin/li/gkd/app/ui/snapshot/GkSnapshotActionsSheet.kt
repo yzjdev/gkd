@@ -59,6 +59,7 @@ fun GkSnapshotActionsSheet(
     onSaveToAlbum: () -> Unit,
     onReplace: () -> Unit,
     onDelete: () -> Unit,
+    onGenerateRule: (() -> Unit)? = null,
 ) {
     fun perform(action: () -> Unit) {
         onDismissRequest()
@@ -116,6 +117,14 @@ fun GkSnapshotActionsSheet(
                 onClick = { perform(onSaveToAlbum) },
             )
             HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+            if (onGenerateRule != null) {
+                SnapshotActionRow(
+                    icon = GkIcons.AutoMode,
+                    title = stringResource(Res.string.ai_generate_rule),
+                    subtitle = stringResource(Res.string.ai_generate_rule_description),
+                    onClick = { perform(onGenerateRule) },
+                )
+            }
             SnapshotActionRow(
                 icon = GkIcons.Edit,
                 title = stringResource(Res.string.snapshot_replace_screenshot),

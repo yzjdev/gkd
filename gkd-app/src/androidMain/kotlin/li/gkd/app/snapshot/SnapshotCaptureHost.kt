@@ -264,6 +264,7 @@ object SnapshotCaptureHost {
 
     suspend fun capture(
         forcedCropStatusBar: Boolean = false,
+        onScreenshotCaptured: (() -> Unit)? = null,
     ): SnapshotCaptureOutcome<ComplexSnapshot> {
         val service =
             AndroidAutomationSessions.service
@@ -305,6 +306,7 @@ object SnapshotCaptureHost {
                             )
                         }
                     val screen = screenshot.await()
+                    onScreenshotCaptured?.invoke()
                     SnapshotCaptureInput(
                         appId = appId,
                         activityId = activityId,

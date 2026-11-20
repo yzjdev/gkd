@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.SyncProblem
@@ -284,6 +285,9 @@ object GkIcons {
 
     val Close
         get() = Icons.Default.Close
+
+    val Search
+        get() = Icons.Default.Search
 
     val OpenInNew
         get() = Icons.AutoMirrored.Outlined.OpenInNew

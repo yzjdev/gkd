@@ -60,6 +60,9 @@ data class SettingsStore(
     val subsExcludeAppGroupType: Int = appGroupType,
     val showDisabledRule: Boolean = true,
     val snapshotDisplayMode: Int = SnapshotDisplayMode.ByTime.value,
+    val enableAi: Boolean = false,
+    val aiBaseUrl: String = "",
+    val aiModel: String = "",
 ) {
     val useA11y
         get() = automatorMode == AutomatorMode.A11y.value
