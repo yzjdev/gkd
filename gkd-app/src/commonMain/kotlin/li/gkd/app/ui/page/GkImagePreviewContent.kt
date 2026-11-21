@@ -41,10 +41,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -93,6 +93,12 @@ import me.saket.telephoto.zoomable.zoomable
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 
+/** A tap on the image content, normalized to the image rectangle in `0..1`. */
+data class ImageTap(val x: Float, val y: Float)
+
+/** Image content rectangle in viewport pixels, as reported by the zoomable container. */
+data class SnapshotImageFrame(val bounds: Rect)
+
 @Composable
 private fun PreviewBaseTitle(title: String) {
     val style =
@@ -119,8 +125,8 @@ fun GkImagePreviewContent(
     pagerState: PagerState? = null,
     titleContent: (@Composable (Int) -> Unit)? = null,
     actionContent: @Composable RowScope.(String?, Int) -> Unit = { _, _ -> },
-    onImageTap: ((String, Offset) -> Unit)? = null,
-    imageOverlay: (@Composable (String, Rect) -> Unit)? = null,
+    onImageTap: ((String, ImageTap) -> Unit)? = null,
+    imageOverlay: (@Composable (String, SnapshotImageFrame) -> Unit)? = null,
     fullscreen: Boolean = false,
     pagingEnabled: Boolean = true,
 ) {
@@ -314,8 +320,8 @@ private fun UriImage(
     uri: String,
     version: Int,
     onToggleBars: () -> Unit = {},
-    onImageTap: ((String, Offset) -> Unit)?,
-    imageOverlay: (@Composable (String, Rect) -> Unit)?,
+    onImageTap: ((String, ImageTap) -> Unit)?,
+    imageOverlay: (@Composable (String, SnapshotImageFrame) -> Unit)?,
 ) {
     val context = LocalPlatformContext.current
 
@@ -456,8 +462,8 @@ private fun ZoomableImageContent(
     uri: String,
     painter: Painter,
     onToggleBars: () -> Unit,
-    onImageTap: ((String, Offset) -> Unit)?,
-    imageOverlay: (@Composable (String, Rect) -> Unit)?,
+    onImageTap: ((String, ImageTap) -> Unit)?,
+    imageOverlay: (@Composable (String, SnapshotImageFrame) -> Unit)?,
 ) {
     // 每个 pager page 都独立持有一个 ZoomableState，避免翻页后复用缩放位置。
     val zoomableState = rememberZoomableState()
@@ -490,10 +496,19 @@ private fun ZoomableImageContent(
                     }
                 }
             }
-    fun imageBounds() =
-        with(zoomableState.coordinateSystem) {
-            contentBounds(clipToViewport = false).rectIn(CoordinateSpace.Viewport)
+    // 图片内容在视口内的矩形会随缩放/平移变化, 边界层与命中测试都必须用同一次采样.
+    var imageBounds by remember { mutableStateOf(Rect.Zero) }
+    val inspectionActive = onImageTap != null
+    val contentTransformed = zoomableState.contentTransformation.isSpecified
+    LaunchedEffect(zoomableState, inspectionActive, contentTransformed) {
+        if (!inspectionActive) return@LaunchedEffect
+        snapshotFlow {
+            with(zoomableState.coordinateSystem) {
+                contentBounds(clipToViewport = false).rectIn(CoordinateSpace.Viewport)
+            }
         }
+            .collect { imageBounds = it }
+    }
 
     // Image() 的绘制区域和实际图片内容边界并不总是完全一致。
     // 把内容位置告诉 Telephoto 后，边缘检测和与 pager 的手势协同会更稳定。
@@ -526,13 +541,19 @@ private fun ZoomableImageContent(
                             if (inspectTap == null) {
                                 onToggleBars()
                             } else if (isInspectionTap) {
-                                val bounds = imageBounds()
-                                if (bounds.contains(point)) {
+                                val bounds = imageBounds
+                                if (
+                                    !bounds.isEmpty &&
+                                        point.x >= bounds.left &&
+                                        point.x <= bounds.right &&
+                                        point.y >= bounds.top &&
+                                        point.y <= bounds.bottom
+                                ) {
                                     inspectTap(
                                         uri,
-                                        Offset(
-                                            (point.x - bounds.left) / bounds.width,
-                                            (point.y - bounds.top) / bounds.height,
+                                        ImageTap(
+                                            x = (point.x - bounds.left) / bounds.width,
+                                            y = (point.y - bounds.top) / bounds.height,
                                         ),
                                     )
                                 }
@@ -542,8 +563,8 @@ private fun ZoomableImageContent(
             contentScale = ContentScale.Inside,
             alignment = Alignment.Center,
         )
-        if (imageOverlay != null && zoomableState.contentTransformation.isSpecified) {
-            imageOverlay(uri, imageBounds())
+        if (imageOverlay != null && inspectionActive) {
+            imageOverlay(uri, SnapshotImageFrame(bounds = imageBounds))
         }
     }
 }

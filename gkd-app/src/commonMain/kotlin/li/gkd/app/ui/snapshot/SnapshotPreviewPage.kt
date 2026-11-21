@@ -107,11 +107,6 @@ fun SnapshotPreviewPage(
                 val currentSnapshot = previewSnapshots[pagerState.currentPage]
                 val currentImageUri = currentSnapshot.image().path
                 var inspecting by remember { mutableStateOf(false) }
-                var inspectionSession by remember { mutableIntStateOf(0) }
-                var treeVisible by remember { mutableStateOf(false) }
-                var locateRequest by remember {
-                    mutableStateOf<SnapshotNodeLocateRequest?>(null)
-                }
                 var propertiesVisible by
                     remember(currentSnapshot.id, imageVersion) {
                         mutableStateOf(false)
@@ -119,7 +114,6 @@ fun SnapshotPreviewPage(
                 val currentTree = nodeState.value?.takeIf { it.snapshot.id == currentSnapshot.id }
                 val selectedForSnapshot = selectedNode?.let { currentTree?.nodes?.get(it) }
                 LaunchedEffect(currentSnapshot.id, imageVersion) {
-                    locateRequest = null
                     inspection.load(currentSnapshot.id)
                 }
                 LaunchedEffect(inspecting, currentSnapshot.id, currentTree) {
@@ -128,18 +122,12 @@ fun SnapshotPreviewPage(
                 fun exitInspection() {
                     inspecting = false
                     propertiesVisible = false
-                    locateRequest = null
                     inspection.clearSelection()
                 }
 
                 fun showNodeProperties(id: Int) {
                     inspection.select(id)
                     propertiesVisible = true
-                }
-
-                fun revealSelectedNode(id: Int) {
-                    treeVisible = true
-                    locateRequest = SnapshotNodeLocateRequest(id)
                 }
 
                 val onBack: () -> Unit = {
@@ -163,19 +151,25 @@ fun SnapshotPreviewPage(
                     onBack = onBack,
                     onImageTap =
                         if (inspecting) {
-                            { uri, point ->
+                            { uri, tap ->
                                 if (uri == currentImageUri) {
                                     inspection.hit(
-                                        point.x,
-                                        point.y,
-                                        onSelected = ::revealSelectedNode,
+                                        tap.x,
+                                        tap.y,
+                                        onSelected = ::showNodeProperties,
                                     )
                                 }
                             }
                         } else null,
-                    imageOverlay = { uri, bounds ->
-                        if (inspecting && currentTree != null && uri == currentImageUri) {
-                            GkSnapshotNodeOutline(currentTree, selectedForSnapshot?.id, bounds)
+                    imageOverlay = { uri, frame ->
+                        if (uri == currentImageUri) {
+                            // 传入节点信息由自定义 View 缓存, 显隐由容器方法统一控制.
+                            GkSnapshotNodeBoundaryView(
+                                tree = currentTree,
+                                selectedId = selectedForSnapshot?.id,
+                                bounds = frame.bounds,
+                                modifier = Modifier.fillMaxSize(),
+                            )
                         }
                     },
                     titleContent = { index ->
@@ -221,9 +215,7 @@ fun SnapshotPreviewPage(
                                 colors = colors,
                                 onClick = {
                                     vm.actionRequest.value?.let(vm::dismissActions)
-                                    inspectionSession++
                                     inspecting = true
-                                    treeVisible = false
                                 },
                             )
                             GkIconButton(
@@ -236,35 +228,15 @@ fun SnapshotPreviewPage(
                     },
                 )
 
-                if (inspectionSession > 0)
-                    key(inspectionSession) {
-                        GkSnapshotNodeTreeSheet(
-                            visible = inspecting && treeVisible,
-                            state = nodeState,
-                            selectedId = selectedForSnapshot?.id,
-                            onSelect = inspection::select,
-                            onShowProperties = ::showNodeProperties,
-                            locateRequest = locateRequest,
-                            onHide = { treeVisible = false },
-                            onRetry = { inspection.load(currentSnapshot.id) },
-                        )
-                    }
                 if (inspecting) {
-                    SnapshotInspectionTools(
-                        treeVisible = treeVisible,
-                        onTreeVisibilityChange = { treeVisible = it },
-                        onExit = ::exitInspection,
-                    )
+                    SnapshotInspectionTools(onExit = ::exitInspection)
                 }
                 if (inspecting && currentTree != null) {
                     if (propertiesVisible && selectedForSnapshot != null) {
                         GkSnapshotNodePropertiesDialog(
                             currentTree,
                             selectedForSnapshot,
-                            onSelect = {
-                                inspection.select(it)
-                                if (treeVisible) locateRequest = SnapshotNodeLocateRequest(it)
-                            },
+                            onSelect = inspection::select,
                             onShowValue = mainVm.textDialog::showText,
                             onDismiss = { propertiesVisible = false },
                         )
